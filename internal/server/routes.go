@@ -1,38 +1,27 @@
 package server
 
 import (
+	"figenn/internal/auth"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 )
 
-func (s *Server) RegisterRoutes() http.Handler {
-	e := echo.New()
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
+func (s *Server) SetupRoutes() {
+	apiGroup := s.router.Group("/api")
 
-	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     []string{"https://*", "http://*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
-		AllowHeaders:     []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-		AllowCredentials: true,
-		MaxAge:           300,
-	}))
+	s.router.GET("/health", s.healthHandler)
 
-	e.GET("/", s.HelloWorldHandler)
+	authRepo := auth.NewRepository(s.db)
+	authService := auth.NewService(authRepo, auth.Config{
+		JWTSecret:     s.config.JWTSecret,
+		TokenDuration: time.Hour * 24 * 7, // 7 jours
+	})
 
-	e.GET("/health", s.healthHandler)
+	authAPI := auth.NewAPI(authService)
+	authAPI.Bind(apiGroup)
 
-	return e
-}
-
-func (s *Server) HelloWorldHandler(c echo.Context) error {
-	resp := map[string]string{
-		"message": "Hello World",
-	}
-
-	return c.JSON(http.StatusOK, resp)
 }
 
 func (s *Server) healthHandler(c echo.Context) error {

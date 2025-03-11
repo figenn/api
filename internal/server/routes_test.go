@@ -2,11 +2,12 @@ package server
 
 import (
 	"encoding/json"
-	"github.com/labstack/echo/v4"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
+
+	"github.com/labstack/echo/v4"
 )
 
 func TestHandler(t *testing.T) {
@@ -16,7 +17,7 @@ func TestHandler(t *testing.T) {
 	c := e.NewContext(req, resp)
 	s := &Server{}
 	// Assertions
-	if err := s.HelloWorldHandler(c); err != nil {
+	if err := s.healthHandler(c); err != nil {
 		t.Errorf("handler() error = %v", err)
 		return
 	}
@@ -26,7 +27,6 @@ func TestHandler(t *testing.T) {
 	}
 	expected := map[string]string{"message": "Hello World"}
 	var actual map[string]string
-	// Decode the response body into the actual map
 	if err := json.NewDecoder(resp.Body).Decode(&actual); err != nil {
 		t.Errorf("handler() error decoding response body: %v", err)
 		return
