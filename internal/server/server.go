@@ -8,6 +8,11 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 )
 
+// mockgen -source=internal/server/server.go -destination=internal/server/mocks/mock_server.go -package=mocks
+type ServerStorer interface {
+	Health() error
+}
+
 type Config struct {
 	JWTSecret string
 }

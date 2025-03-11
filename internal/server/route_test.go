@@ -2,21 +2,37 @@ package server
 
 import (
 	"encoding/json"
+	"figenn/internal/database/mocks"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"go.uber.org/mock/gomock"
 )
 
 func TestHandler(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDB := mocks.NewMockService(ctrl)
+
+	mockDB.EXPECT().Health().Return(map[string]string{"message": "Hello World"})
+
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	resp := httptest.NewRecorder()
 	c := e.NewContext(req, resp)
-	s := &Server{}
-	// Assertions
+
+	s := &Server{
+		router: e,
+		db:     mockDB,
+		config: Config{
+			JWTSecret: "test-secret",
+		},
+	}
+
 	if err := s.healthHandler(c); err != nil {
 		t.Errorf("handler() error = %v", err)
 		return
@@ -31,7 +47,7 @@ func TestHandler(t *testing.T) {
 		t.Errorf("handler() error decoding response body: %v", err)
 		return
 	}
-	// Compare the decoded response with the expected value
+
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("handler() wrong response body. expected = %v, actual = %v", expected, actual)
 		return

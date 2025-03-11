@@ -8,32 +8,22 @@ import (
 )
 
 func main() {
-	log.Println("Application démarrage...")
-
-	// Récupération des variables d'environnement
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		jwtSecret = "default_jwt_secret_for_development"
-		log.Println("WARNING: Using default JWT secret. Set JWT_SECRET env var for production.")
+		log.Fatal("La clé secrète JWT n'a pas été définie")
 	}
 
 	log.Println("Initialisation de la base de données...")
-	// Initialisation de la base de données
 	db := database.New()
 	defer db.Close()
 
 	log.Println("Création du serveur...")
-	// Initialisation du serveur avec la configuration
 	config := server.Config{
 		JWTSecret: jwtSecret,
 	}
 	srv := server.NewServer(db, config)
-
-	log.Println("Configuration des routes...")
-	// Configuration des routes
 	srv.SetupRoutes()
 
-	// Démarrage du serveur
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

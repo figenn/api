@@ -13,8 +13,7 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 )
 
-// Service represents a service that interacts with a database.
-// Service represents a service that interacts with a database.
+// mockgen -source=internal/database/database.go -destination=internal/database/mocks/mock_database.go -package=mocks
 type Service interface {
 	// Health returns a map of health status information.
 	Health() map[string]string
