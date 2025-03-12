@@ -6,13 +6,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"figenn/internal/mailer"
-	"figenn/internal/user"
+	"figenn/internal/users"
 	"figenn/internal/utils"
 	"log"
 	"time"
 
 	"github.com/bluele/gcache"
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/golang-jwt/jwt"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -66,7 +66,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		return nil, err
 	}
 
-	newUser := &user.User{
+	newUser := &users.User{
 		Email:             req.Email,
 		FirstName:         req.FirstName,
 		LastName:          req.LastName,
@@ -112,7 +112,6 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": user.ID,
 		"email":   user.Email,
-		"name":    user.FirstName + " " + user.LastName,
 		"exp":     time.Now().Add(s.config.TokenDuration).Unix(),
 		"iat":     time.Now().Unix(),
 	})

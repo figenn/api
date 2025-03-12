@@ -5,7 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"figenn/internal/database"
-	"figenn/internal/user"
+	"figenn/internal/users"
+	user "figenn/internal/users"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,7 +32,7 @@ func (r *Repository) UserExistsByEmail(ctx context.Context, email string) (bool,
 	return count > 0, nil
 }
 
-func (r *Repository) CreateUser(ctx context.Context, user *user.User) error {
+func (r *Repository) CreateUser(ctx context.Context, user *users.User) error {
 	query := `INSERT INTO users (email, password, first_name, last_name, profile_picture_url, country) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
 	return r.s.Pool().QueryRow(ctx, query, user.Email, user.Password, user.FirstName, user.LastName, user.ProfilePictureUrl, user.Country).Scan(&user.ID)
 }

@@ -3,11 +3,11 @@ package utils
 import (
 	"context"
 	"figenn/internal/mailer"
-	"figenn/internal/user"
+	"figenn/internal/users"
 	"log"
 )
 
-func SendWelcomeEmail(mailerClient mailer.Mailer, user *user.User) {
+func SendWelcomeEmail(mailerClient mailer.Mailer, user *users.User) {
 	ctx := context.Background()
 	emailConfig := mailer.Config{
 		To:      user.Email,
@@ -21,7 +21,7 @@ func SendWelcomeEmail(mailerClient mailer.Mailer, user *user.User) {
 	}
 }
 
-func SendResetPasswordEmail(mailerClient mailer.Mailer, user *user.User, resetLink string) {
+func SendResetPasswordEmail(mailerClient mailer.Mailer, user *users.User, resetLink string) {
 	ctx := context.Background()
 	emailConfig := mailer.Config{
 		To:      user.Email,

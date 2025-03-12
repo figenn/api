@@ -3,6 +3,8 @@ package server
 import (
 	"figenn/internal/auth"
 	"figenn/internal/mailer"
+	"figenn/internal/users"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -13,8 +15,24 @@ import (
 func (s *Server) SetupRoutes() {
 	apiGroup := s.router.Group("/api")
 
-	s.router.GET("/health", s.healthHandler)
+	apiGroup.GET("/health", s.healthHandler)
 
+	s.setupAuthRoutes(apiGroup)
+
+	s.setupUserRoutes(apiGroup)
+}
+
+func (s *Server) setupAuthRoutes(apiGroup *echo.Group) {
+	authAPI := s.newAuthAPI()
+	authAPI.Bind(apiGroup)
+}
+
+func (s *Server) setupUserRoutes(apiGroup *echo.Group) {
+	userAPI := s.newUserAPI()
+	userAPI.Bind(apiGroup)
+}
+
+func (s *Server) newAuthAPI() *auth.API {
 	authRepo := auth.NewRepository(s.db)
 	authService := auth.NewService(authRepo, &auth.Config{
 		JWTSecret:     s.config.JWTSecret,
@@ -22,11 +40,16 @@ func (s *Server) SetupRoutes() {
 		AppURL:        os.Getenv("APP_URL"),
 	}, mailer.NewMailer(os.Getenv("RESEND_API_KEY")))
 
-	authAPI := auth.NewAPI(authService)
-	authAPI.Bind(apiGroup)
+	return auth.NewAPI(authService)
+}
 
+func (s *Server) newUserAPI() *users.API {
+	userRepo := users.NewRepository(s.db)
+	authService := users.NewService(userRepo)
+	return users.NewAPI(s.config.JWTSecret, authService)
 }
 
 func (s *Server) healthHandler(c echo.Context) error {
+	fmt.Println("Health check")
 	return c.JSON(http.StatusOK, s.db.Health())
 }

@@ -4,6 +4,7 @@ go 1.24.1
 
 require (
 	github.com/bluele/gcache v0.0.2
+	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.2
