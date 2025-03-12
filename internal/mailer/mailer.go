@@ -3,18 +3,15 @@ package mailer
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/resend/resend-go/v2"
 )
 
 type Config struct {
-	From    string
 	To      string
 	Html    string
 	Subject string
-	Cc      []string
-	Bcc     []string
-	ReplyTo string
 }
 
 // mockgen -source=internal/mailer/mailer.go -destination=internal/mailer/mocks/mock_mailer.go -package=mocks
@@ -33,18 +30,15 @@ func NewMailer(apiKey string) Mailer {
 }
 
 func (m *resendMailer) SendMail(ctx context.Context, config Config) (string, error) {
-	if config.From == "" || len(config.To) == 0 || config.Html == "" || config.Subject == "" {
+	if len(config.To) == 0 || config.Html == "" || config.Subject == "" {
 		return "", fmt.Errorf("from, to, html and subject fields are required")
 	}
 
 	params := &resend.SendEmailRequest{
-		From:    config.From,
+		From:    os.Getenv("SENDER_EMAIL"),
 		To:      []string{config.To},
 		Html:    config.Html,
 		Subject: config.Subject,
-		Cc:      config.Cc,
-		Bcc:     config.Bcc,
-		ReplyTo: config.ReplyTo,
 	}
 
 	sent, err := m.client.Emails.Send(params)
