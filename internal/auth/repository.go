@@ -33,8 +33,8 @@ func (r *Repository) UserExistsByEmail(ctx context.Context, email string) (bool,
 }
 
 func (r *Repository) CreateUser(ctx context.Context, user *users.User) error {
-	query := `INSERT INTO users (email, password, first_name, last_name, profile_picture_url, country) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
-	return r.s.Pool().QueryRow(ctx, query, user.Email, user.Password, user.FirstName, user.LastName, user.ProfilePictureUrl, user.Country).Scan(&user.ID)
+	query := `INSERT INTO users (email, password, first_name, last_name, profile_picture_url, country, subscription) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`
+	return r.s.Pool().QueryRow(ctx, query, user.Email, user.Password, user.FirstName, user.LastName, user.ProfilePictureUrl, user.Country, user.Subscription).Scan(&user.ID)
 }
 
 func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*user.User, error) {
