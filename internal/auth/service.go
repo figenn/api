@@ -149,7 +149,7 @@ func (s *Service) ForgotPassword(ctx context.Context, req ForgotPasswordRequest)
 	if err != nil {
 		return ErrInternalServer
 	}
-	err = s.cache.SetWithExpire(idUser, tokenGenerated, time.Minute*5)
+	err = s.cache.SetWithExpire(tokenGenerated, idUser, time.Minute*5)
 	if err != nil {
 		log.Println("Failed to cache reset token", err)
 	}
@@ -212,4 +212,69 @@ func generateSecureToken() string {
 		return ""
 	}
 	return base64.URLEncoding.EncodeToString(b)
+}
+
+func (s *Service) ValidateResetToken(ctx context.Context, token string) error {
+	if token == "" {
+		return ErrMissingFields
+	}
+
+	tokenValue, err := s.cache.Get(token)
+	if err == nil {
+		_, ok := tokenValue.(int)
+		if ok {
+			return nil
+		}
+	}
+
+	err = s.repo.ValidateResetToken(ctx, token)
+	if err != nil {
+		return ErrInvalidToken
+	}
+
+	return nil
+}
+
+func (s *Service) ResetPassword(ctx context.Context, req ResetPasswordRequest) error {
+	if req.Token == "" || req.Password == "" {
+		return ErrMissingFields
+	}
+
+	if !isStrongPassword(req.Password) {
+		return ErrPasswordTooWeak
+	}
+
+	var userID int
+	tokenValue, err := s.cache.Get(req.Token)
+	if err == nil {
+		id, ok := tokenValue.(int)
+		if ok {
+			userID = id
+		}
+	}
+
+	if userID == 0 {
+		id, valid, dbErr := s.repo.GetUserIDByResetToken(ctx, req.Token)
+		if dbErr != nil || !valid {
+			return ErrInvalidToken
+		}
+		userID = id
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
+	if err != nil {
+		return err
+	}
+
+	err = s.repo.ResetPassword(ctx, userID, string(hashedPassword))
+	if err != nil {
+		return ErrInternalServer
+	}
+
+	err = s.repo.ClearResetToken(ctx, userID)
+	if err != nil {
+		log.Println("Failed to clear reset token:", err)
+	}
+
+	return nil
 }

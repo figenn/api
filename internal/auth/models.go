@@ -25,6 +25,10 @@ type ForgotPasswordRequest struct {
 	Email string `json:"email" form:"email"`
 }
 
+type ResetPasswordRequest struct {
+	Token    string `json:"token" form:"token"`
+	Password string `json:"password" form:"password"`
+}
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
