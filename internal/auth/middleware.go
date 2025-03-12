@@ -44,7 +44,7 @@ func JWT(config JWTConfig) echo.MiddlewareFunc {
 			}
 
 			if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-				// Stocker les claims dans le contexte
+
 				c.Set("user", claims)
 				return next(c)
 			}

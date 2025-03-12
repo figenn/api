@@ -2,9 +2,9 @@ name: Go-test
 on: [pull_request]
 
 jobs:
-  build:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,17 +25,43 @@ jobs:
       - name: Tidy Go Module
         run: go mod tidy
 
-      - name: Clean Go cache
-        run: go clean -cache -modcache -testcache -fuzzcache
-
       - name: Run GolangCI-Lint
         uses: golangci/golangci-lint-action@v3
         with:
           version: latest
           args: --out-format=colored-line-number --timeout=5m
 
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.22.x"
+
       - name: Build
         run: go build -v ./...
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.22.x"
+
+      - name: Clean Go cache
+        run: go clean -cache -modcache -testcache -fuzzcache
 
       - name: Test with the Go CLI
         run: go test ./...

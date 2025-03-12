@@ -1,9 +1,13 @@
-package user
+package users
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type User struct {
-	ID                  int        `json:"id"`
+	ID                  uuid.UUID  `json:"id"`
 	FirstName           string     `json:"first_name" form:"first_name"`
 	LastName            string     `json:"last_name" form:"last_name"`
 	Email               string     `json:"email" form:"email"`
@@ -22,4 +26,14 @@ type User struct {
 	TwoFACode           string     `json:"two_fa_code,omitempty" form:"two_fa_code"`
 	CreatedAt           time.Time  `json:"created_at" form:"created_at"`
 	UpdatedAt           time.Time  `json:"updated_at" form:"updated_at"`
+}
+
+type UserRequest struct {
+	ID                uuid.UUID `json:"id"`
+	FirstName         string    `json:"first_name" form:"first_name"`
+	LastName          string    `json:"last_name" form:"last_name"`
+	Email             string    `json:"email" form:"email"`
+	Country           string    `json:"country,omitempty" form:"country"`
+	ProfilePictureUrl string    `json:"profile_picture_url,omitempty" form:"profile_picture_url"`
+	CreatedAt         time.Time `json:"created_at" form:"created_at"`
 }
