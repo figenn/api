@@ -2,19 +2,18 @@ package database
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 	"os"
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/joho/godotenv/autoload"
 )
 
 // mockgen -source=internal/database/database.go -destination=internal/database/mocks/mock_database.go -package=mocks
-type Service interface {
+type DbService interface {
 	// Health returns a map of health status information.
 	Health() map[string]string
 
@@ -22,11 +21,12 @@ type Service interface {
 	// It returns an error if the connection cannot be closed.
 	Close() error
 
-	// GetDB returns the underlying database connection.
-	DB() *sql.DB
+	// Pool returns the underlying pgxpool connection pool.
+	Pool() *pgxpool.Pool
 }
+
 type service struct {
-	db *sql.DB
+	pool *pgxpool.Pool
 }
 
 var (
@@ -39,18 +39,45 @@ var (
 	dbInstance *service
 )
 
-func New() Service {
+func New() DbService {
 	// Reuse Connection
 	if dbInstance != nil {
 		return dbInstance
 	}
-	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable&search_path=%s", username, password, host, port, database, schema)
-	db, err := sql.Open("pgx", connStr)
+
+	// Préparation de l'URL de connexion
+	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable&search_path=%s",
+		username, password, host, port, database, schema)
+
+	// Configuration du pool avec des options personnalisées
+	config, err := pgxpool.ParseConfig(connStr)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Unable to parse pool config: %v", err)
 	}
+
+	// Paramétrage du pool
+	config.MaxConns = 25                      // Connexions max simultanées
+	config.MinConns = 5                       // Connexions min maintenues
+	config.MaxConnLifetime = 1 * time.Hour    // Durée de vie max d'une connexion
+	config.MaxConnIdleTime = 30 * time.Minute // Temps max d'inactivité
+
+	// Création du pool avec la configuration personnalisée
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		log.Fatalf("Unable to create connection pool: %v", err)
+	}
+
+	// Test de la connexion
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := pool.Ping(ctx); err != nil {
+		log.Fatalf("Unable to connect to database: %v", err)
+	}
+
+	log.Printf("Successfully connected to database: %s", database)
+
 	dbInstance = &service{
-		db: db,
+		pool: pool,
 	}
 	return dbInstance
 }
@@ -64,11 +91,11 @@ func (s *service) Health() map[string]string {
 	stats := make(map[string]string)
 
 	// Ping the database
-	err := s.db.PingContext(ctx)
+	err := s.pool.Ping(ctx)
 	if err != nil {
 		stats["status"] = "down"
 		stats["error"] = fmt.Sprintf("db down: %v", err)
-		log.Fatalf("db down: %v", err) // Log the error and terminate the program
+		log.Printf("db down: %v", err) // Log the error but don't terminate the program
 		return stats
 	}
 
@@ -76,31 +103,20 @@ func (s *service) Health() map[string]string {
 	stats["status"] = "up"
 	stats["message"] = "It's healthy"
 
-	// Get database stats (like open connections, in use, idle, etc.)
-	dbStats := s.db.Stats()
-	stats["open_connections"] = strconv.Itoa(dbStats.OpenConnections)
-	stats["in_use"] = strconv.Itoa(dbStats.InUse)
-	stats["idle"] = strconv.Itoa(dbStats.Idle)
-	stats["wait_count"] = strconv.FormatInt(dbStats.WaitCount, 10)
-	stats["wait_duration"] = dbStats.WaitDuration.String()
-	stats["max_idle_closed"] = strconv.FormatInt(dbStats.MaxIdleClosed, 10)
-	stats["max_lifetime_closed"] = strconv.FormatInt(dbStats.MaxLifetimeClosed, 10)
+	// Get pgxpool stats
+	poolStats := s.pool.Stat()
+	stats["total_connections"] = strconv.Itoa(int(poolStats.TotalConns()))
+	stats["acquired_connections"] = strconv.Itoa(int(poolStats.AcquiredConns()))
+	stats["idle_connections"] = strconv.Itoa(int(poolStats.IdleConns()))
+	stats["max_connections"] = strconv.Itoa(int(poolStats.MaxConns()))
 
-	// Evaluate stats to provide a health message
-	if dbStats.OpenConnections > 40 { // Assuming 50 is the max for this example
-		stats["message"] = "The database is experiencing heavy load."
+	// Évaluer les stats pour fournir un message de santé
+	if int(poolStats.TotalConns()) > int(float64(poolStats.MaxConns())*0.8) {
+		stats["message"] = "The database pool is nearing capacity."
 	}
 
-	if dbStats.WaitCount > 1000 {
-		stats["message"] = "The database has a high number of wait events, indicating potential bottlenecks."
-	}
-
-	if dbStats.MaxIdleClosed > int64(dbStats.OpenConnections)/2 {
-		stats["message"] = "Many idle connections are being closed, consider revising the connection pool settings."
-	}
-
-	if dbStats.MaxLifetimeClosed > int64(dbStats.OpenConnections)/2 {
-		stats["message"] = "Many connections are being closed due to max lifetime, consider increasing max lifetime or revising the connection usage pattern."
+	if poolStats.AcquiredConns() > poolStats.IdleConns()*3 {
+		stats["message"] = "High ratio of active to idle connections, consider increasing pool size."
 	}
 
 	return stats
@@ -108,14 +124,13 @@ func (s *service) Health() map[string]string {
 
 // Close closes the database connection.
 // It logs a message indicating the disconnection from the specific database.
-// If the connection is successfully closed, it returns nil.
-// If an error occurs while closing the connection, it returns the error.
 func (s *service) Close() error {
-	log.Printf("Disconnected from database: %s", database)
-	return s.db.Close()
+	log.Printf("Disconnecting from database: %s", database)
+	s.pool.Close()
+	return nil
 }
 
-// Ajoutez cette méthode à l'implémentation service
-func (s *service) DB() *sql.DB {
-	return s.db
+// Pool returns the underlying pgxpool connection pool.
+func (s *service) Pool() *pgxpool.Pool {
+	return s.pool
 }

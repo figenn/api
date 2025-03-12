@@ -38,7 +38,7 @@ func (a *API) Register(c echo.Context) error {
 		})
 	}
 
-	resp, err := a.service.Register(req)
+	resp, err := a.service.Register(c.Request().Context(), req)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrUserExists):
@@ -69,7 +69,7 @@ func (a *API) Login(c echo.Context) error {
 		})
 	}
 
-	resp, err := a.service.Login(req)
+	resp, err := a.service.Login(c.Request().Context(), req)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidCredentials) || errors.Is(err, ErrInvalidEmail):

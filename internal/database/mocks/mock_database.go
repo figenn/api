@@ -10,38 +10,38 @@
 package mocks
 
 import (
-	sql "database/sql"
 	reflect "reflect"
 
+	pgxpool "github.com/jackc/pgx/v5/pgxpool"
 	gomock "go.uber.org/mock/gomock"
 )
 
-// MockService is a mock of Service interface.
-type MockService struct {
+// MockDbService is a mock of DbService interface.
+type MockDbService struct {
 	ctrl     *gomock.Controller
-	recorder *MockServiceMockRecorder
+	recorder *MockDbServiceMockRecorder
 	isgomock struct{}
 }
 
-// MockServiceMockRecorder is the mock recorder for MockService.
-type MockServiceMockRecorder struct {
-	mock *MockService
+// MockDbServiceMockRecorder is the mock recorder for MockDbService.
+type MockDbServiceMockRecorder struct {
+	mock *MockDbService
 }
 
-// NewMockService creates a new mock instance.
-func NewMockService(ctrl *gomock.Controller) *MockService {
-	mock := &MockService{ctrl: ctrl}
-	mock.recorder = &MockServiceMockRecorder{mock}
+// NewMockDbService creates a new mock instance.
+func NewMockDbService(ctrl *gomock.Controller) *MockDbService {
+	mock := &MockDbService{ctrl: ctrl}
+	mock.recorder = &MockDbServiceMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockService) EXPECT() *MockServiceMockRecorder {
+func (m *MockDbService) EXPECT() *MockDbServiceMockRecorder {
 	return m.recorder
 }
 
 // Close mocks base method.
-func (m *MockService) Close() error {
+func (m *MockDbService) Close() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Close")
 	ret0, _ := ret[0].(error)
@@ -49,27 +49,13 @@ func (m *MockService) Close() error {
 }
 
 // Close indicates an expected call of Close.
-func (mr *MockServiceMockRecorder) Close() *gomock.Call {
+func (mr *MockDbServiceMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockService)(nil).Close))
-}
-
-// DB mocks base method.
-func (m *MockService) DB() *sql.DB {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DB")
-	ret0, _ := ret[0].(*sql.DB)
-	return ret0
-}
-
-// DB indicates an expected call of DB.
-func (mr *MockServiceMockRecorder) DB() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DB", reflect.TypeOf((*MockService)(nil).DB))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockDbService)(nil).Close))
 }
 
 // Health mocks base method.
-func (m *MockService) Health() map[string]string {
+func (m *MockDbService) Health() map[string]string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Health")
 	ret0, _ := ret[0].(map[string]string)
@@ -77,7 +63,21 @@ func (m *MockService) Health() map[string]string {
 }
 
 // Health indicates an expected call of Health.
-func (mr *MockServiceMockRecorder) Health() *gomock.Call {
+func (mr *MockDbServiceMockRecorder) Health() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Health", reflect.TypeOf((*MockService)(nil).Health))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Health", reflect.TypeOf((*MockDbService)(nil).Health))
+}
+
+// Pool mocks base method.
+func (m *MockDbService) Pool() *pgxpool.Pool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Pool")
+	ret0, _ := ret[0].(*pgxpool.Pool)
+	return ret0
+}
+
+// Pool indicates an expected call of Pool.
+func (mr *MockDbServiceMockRecorder) Pool() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Pool", reflect.TypeOf((*MockDbService)(nil).Pool))
 }

@@ -5,6 +5,7 @@ type RegisterRequest struct {
 	LastName  string `json:"last_name" form:"last_name"`
 	Email     string `json:"email" form:"email"`
 	Password  string `json:"password" form:"password"`
+	Country   string `json:"country" form:"country"`
 }
 
 type RegisterResponse struct {

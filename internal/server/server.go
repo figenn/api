@@ -18,12 +18,12 @@ type Config struct {
 }
 
 type Server struct {
-	db     database.Service
+	db     database.DbService
 	router *echo.Echo
 	config Config
 }
 
-func NewServer(db database.Service, config Config) *Server {
+func NewServer(db database.DbService, config Config) *Server {
 	e := echo.New()
 
 	e.Use(middleware.Logger())

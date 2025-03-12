@@ -1,12 +1,15 @@
 package auth
 
 import (
+	"context"
 	"errors"
+	"figenn/internal/mailer"
 	"figenn/internal/user"
-	"fmt"
+	"log"
 	"regexp"
 	"time"
 
+	"github.com/bluele/gcache"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -19,16 +22,20 @@ type Config struct {
 type Service struct {
 	repo   *Repository
 	config Config
+	cache  gcache.Cache
+	mailer mailer.Mailer
 }
 
-func NewService(repo *Repository, config Config) *Service {
+func NewService(repo *Repository, config *Config, mailerClient mailer.Mailer) *Service {
 	return &Service{
 		repo:   repo,
-		config: config,
+		config: *config,
+		cache:  gcache.New(100).LRU().Expiration(time.Minute * 5).Build(),
+		mailer: mailerClient,
 	}
 }
 
-func (s *Service) Register(req RegisterRequest) (*RegisterResponse, error) {
+func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterResponse, error) {
 	if req.Email == "" || req.Password == "" || req.FirstName == "" || req.LastName == "" {
 		return nil, ErrMissingFields
 	}
@@ -41,11 +48,9 @@ func (s *Service) Register(req RegisterRequest) (*RegisterResponse, error) {
 		return nil, ErrPasswordTooWeak
 	}
 
-	exists, err := s.repo.UserExistsByEmail(req.Email)
-	if err != nil {
-		if !errors.Is(err, ErrUserNotFound) {
-			return nil, err
-		}
+	exists, err := s.repo.UserExistsByEmail(ctx, req.Email)
+	if err != nil && !errors.Is(err, ErrUserNotFound) {
+		return nil, err
 	}
 
 	if exists {
@@ -58,23 +63,31 @@ func (s *Service) Register(req RegisterRequest) (*RegisterResponse, error) {
 	}
 
 	newUser := &user.User{
-		Email:     req.Email,
-		FirstName: req.FirstName,
-		LastName:  req.LastName,
-		Password:  string(hashedPassword),
+		Email:             req.Email,
+		FirstName:         req.FirstName,
+		LastName:          req.LastName,
+		Password:          string(hashedPassword),
+		ProfilePictureUrl: "https://api.dicebear.com/7.x/initials/svg?seed=" + string(req.FirstName[0]) + string(req.LastName[0]),
+		Country:           req.Country,
 	}
 
-	err = s.repo.CreateUser(newUser)
+	err = s.repo.CreateUser(ctx, newUser)
 	if err != nil {
 		return nil, err
 	}
+
+	if cacheErr := s.cache.SetWithExpire(newUser.Email, newUser, time.Minute*5); cacheErr != nil {
+		log.Println("Failed to cache user", cacheErr)
+	}
+
+	go s.sendWelcomeEmail(newUser)
 
 	return &RegisterResponse{
 		Message: "User created successfully",
 	}, nil
 }
 
-func (s *Service) Login(req LoginRequest) (*LoginResponse, error) {
+func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, error) {
 	if req.Email == "" || req.Password == "" {
 		return nil, ErrMissingFields
 	}
@@ -83,12 +96,9 @@ func (s *Service) Login(req LoginRequest) (*LoginResponse, error) {
 		return nil, ErrInvalidEmail
 	}
 
-	user, err := s.repo.GetUserByEmail(req.Email)
-	if err != nil {
-		if errors.Is(err, ErrUserNotFound) {
-			return nil, ErrInvalidCredentials
-		}
-		return nil, fmt.Errorf("%w: %v", ErrDatabaseOperation, err)
+	user, err := s.repo.GetUserByEmail(ctx, req.Email)
+	if err != nil && !errors.Is(err, ErrUserNotFound) {
+		return nil, ErrInvalidCredentials
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password))
@@ -128,4 +138,20 @@ func isStrongPassword(password string) bool {
 	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString(password)
 
 	return hasNumber && hasUpper
+}
+
+func (s *Service) sendWelcomeEmail(user *user.User) {
+	ctx := context.Background()
+
+	emailConfig := mailer.Config{
+		From:    "contact@alexandredissi.fr",
+		To:      user.Email,
+		Subject: "Bienvenue sur notre application",
+		Html:    "<p>Bonjour " + user.FirstName + ",</p><p>Merci de vous être inscrit sur notre application.</p>",
+	}
+
+	_, err := s.mailer.SendMail(ctx, emailConfig)
+	if err != nil {
+		log.Println("Failed to send welcome email", err)
+	}
 }

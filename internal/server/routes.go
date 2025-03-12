@@ -2,7 +2,9 @@ package server
 
 import (
 	"figenn/internal/auth"
+	"figenn/internal/mailer"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -14,10 +16,10 @@ func (s *Server) SetupRoutes() {
 	s.router.GET("/health", s.healthHandler)
 
 	authRepo := auth.NewRepository(s.db)
-	authService := auth.NewService(authRepo, auth.Config{
+	authService := auth.NewService(authRepo, &auth.Config{
 		JWTSecret:     s.config.JWTSecret,
-		TokenDuration: time.Hour * 24 * 7, // 7 jours
-	})
+		TokenDuration: time.Hour * 24 * 5, // 5 jours
+	}, mailer.NewMailer(os.Getenv("RESEND_API_KEY")))
 
 	authAPI := auth.NewAPI(authService)
 	authAPI.Bind(apiGroup)

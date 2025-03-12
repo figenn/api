@@ -16,7 +16,7 @@ func TestHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockDB := mocks.NewMockService(ctrl)
+	mockDB := mocks.NewMockDbService(ctrl)
 
 	mockDB.EXPECT().Health().Return(map[string]string{"message": "Hello World"})
 
