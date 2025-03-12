@@ -4,6 +4,7 @@ import (
 	"context"
 	"figenn/internal/database"
 	"figenn/internal/user"
+	"time"
 )
 
 type Repository struct {
@@ -35,8 +36,27 @@ func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*user.Us
 	var u user.User
 	err := r.s.Pool().QueryRow(ctx, "SELECT id, email, password FROM users WHERE email = $1", email).Scan(&u.ID, &u.Email, &u.Password)
 	if err != nil {
-		return nil, err
+		return nil, ErrUserNotFound
 	}
 
 	return &u, nil
+}
+
+func (r *Repository) SavePasswordResetToken(ctx context.Context, id int, token string) (int, string, error) {
+	currentTime := time.Now()
+	query := `UPDATE users 
+              SET reset_password_token = $2, 
+                  is_resetting_password = true, 
+                  date_reset_password = $3
+              WHERE id = $1 
+              RETURNING id, reset_password_token`
+
+	var returnedID int
+	var returnedToken string
+	err := r.s.Pool().QueryRow(ctx, query, id, token, currentTime).Scan(&returnedID, &returnedToken)
+	if err != nil {
+		return 0, "", err
+	}
+
+	return returnedID, returnedToken, nil
 }

@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"figenn/internal/mailer"
 	"figenn/internal/user"
@@ -17,6 +19,7 @@ import (
 type Config struct {
 	JWTSecret     string
 	TokenDuration time.Duration
+	AppURL        string
 }
 
 type Service struct {
@@ -124,6 +127,36 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 	}, nil
 }
 
+func (s *Service) ForgotPassword(ctx context.Context, req ForgotPasswordRequest) error {
+	if req.Email == "" {
+		return ErrMissingFields
+	}
+
+	if !isValidEmail(req.Email) {
+		return ErrInvalidEmail
+	}
+
+	user, err := s.repo.GetUserByEmail(ctx, req.Email)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			return ErrUserNotFound
+		}
+		return ErrInternalServer
+	}
+
+	token := generateSecureToken()
+	idUser, tokenGenerated, err := s.repo.SavePasswordResetToken(ctx, user.ID, token)
+	if err != nil {
+		return ErrInternalServer
+	}
+	s.cache.SetWithExpire(idUser, tokenGenerated, time.Minute*5)
+
+	resetUrl := s.config.AppURL + "/auth/reset-password?token=" + token
+	go s.sendResetPasswordEmail(user, resetUrl)
+
+	return nil
+}
+
 func isValidEmail(email string) bool {
 	return regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`).MatchString(email)
 }
@@ -145,12 +178,35 @@ func (s *Service) sendWelcomeEmail(user *user.User) {
 
 	emailConfig := mailer.Config{
 		To:      user.Email,
-		Subject: "Bienvenue sur notre application",
-		Html:    "<p>Bonjour " + user.FirstName + ",</p><p>Merci de vous être inscrit sur notre application.</p>",
+		Subject: "Welcome to our application",
+		Html:    "<p>Hello " + user.FirstName + ",</p><p>Thank you for signing up for our application.</p>",
 	}
 
 	_, err := s.mailer.SendMail(ctx, emailConfig)
 	if err != nil {
 		log.Println("Failed to send welcome email", err)
 	}
+}
+
+func (s *Service) sendResetPasswordEmail(user *user.User, resetLink string) {
+	ctx := context.Background()
+
+	emailConfig := mailer.Config{
+		To:      user.Email,
+		Subject: "Password Reset",
+		Html:    "<p>Hello " + user.FirstName + " " + user.LastName + ",</p><p>Click the following link to reset your password: <a href=\"" + resetLink + "\">Reset Password</a></p>",
+	}
+
+	_, err := s.mailer.SendMail(ctx, emailConfig)
+	if err != nil {
+		log.Println("Failed to send reset password email", err)
+	}
+}
+
+func generateSecureToken() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
+	return base64.URLEncoding.EncodeToString(b)
 }

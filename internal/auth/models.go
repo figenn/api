@@ -21,6 +21,10 @@ type LoginResponse struct {
 	Token string `json:"token"`
 }
 
+type ForgotPasswordRequest struct {
+	Email string `json:"email" form:"email"`
+}
+
 type ErrorResponse struct {
 	Error string `json:"error"`
 }

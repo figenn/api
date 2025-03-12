@@ -19,6 +19,7 @@ func (s *Server) SetupRoutes() {
 	authService := auth.NewService(authRepo, &auth.Config{
 		JWTSecret:     s.config.JWTSecret,
 		TokenDuration: time.Hour * 24 * 5, // 5 jours
+		AppURL:        os.Getenv("APP_URL"),
 	}, mailer.NewMailer(os.Getenv("RESEND_API_KEY")))
 
 	authAPI := auth.NewAPI(authService)

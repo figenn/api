@@ -21,6 +21,7 @@ func (a *API) Bind(rg *echo.Group) {
 	authGroup := rg.Group("/auth")
 	authGroup.POST("/register", a.Register)
 	authGroup.POST("/login", a.Login)
+	authGroup.POST("/forgot-password", a.ForgotPassword)
 }
 
 func (a *API) Register(c echo.Context) error {
@@ -85,4 +86,39 @@ func (a *API) Login(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, resp)
+}
+
+func (a *API) ForgotPassword(c echo.Context) error {
+	var req ForgotPasswordRequest
+
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error: "Request format is invalid",
+		})
+	}
+
+	if req.Email == "" {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error: ErrMissingFields.Error(),
+		})
+	}
+
+	err := a.service.ForgotPassword(c.Request().Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrUserNotFound):
+			return c.JSON(http.StatusNotFound, ErrorResponse{
+				Error: err.Error(),
+			})
+
+		default:
+			return c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Error: ErrInternalServer.Error(),
+			})
+		}
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"message": "Password reset link has been sent to your email",
+	})
 }
