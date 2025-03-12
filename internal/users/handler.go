@@ -33,7 +33,9 @@ func (a *API) Me(c echo.Context) error {
 
 	u, err := a.s.GetUserInfos(ctx, userId)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "Utilisateur introuvable")
+		return c.JSON(http.StatusInternalServerError, map[string]interface{}{
+			"error": err.Error(),
+		})
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
