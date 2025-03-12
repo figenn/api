@@ -149,7 +149,10 @@ func (s *Service) ForgotPassword(ctx context.Context, req ForgotPasswordRequest)
 	if err != nil {
 		return ErrInternalServer
 	}
-	s.cache.SetWithExpire(idUser, tokenGenerated, time.Minute*5)
+	err = s.cache.SetWithExpire(idUser, tokenGenerated, time.Minute*5)
+	if err != nil {
+		log.Println("Failed to cache reset token", err)
+	}
 
 	resetUrl := s.config.AppURL + "/auth/reset-password?token=" + token
 	go s.sendResetPasswordEmail(user, resetUrl)

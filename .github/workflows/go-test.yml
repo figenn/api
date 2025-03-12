@@ -6,19 +6,39 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
           go-version: "1.22.x"
 
-      - name: Lint
+      - name: Verify go.mod presence
+        run: |
+          if [ ! -f go.mod ]; then
+            echo "❌ ERROR: go.mod not found!"
+            exit 1
+          fi
+          cat go.mod
+
+      - name: Tidy Go Module
+        run: go mod tidy
+
+      - name: Clean Go cache
+        run: go clean -cache -modcache -testcache -fuzzcache
+
+      - name: Run GolangCI-Lint
         uses: golangci/golangci-lint-action@v3
         with:
           version: latest
-          args: --timeout=5m
+          args: --out-format=colored-line-number --timeout=5m
 
       - name: Build
         run: go build -v ./...
+
       - name: Test with the Go CLI
         run: go test ./...
+
+      - name: Final
+        run: echo "👊🏼 VAMOS"
