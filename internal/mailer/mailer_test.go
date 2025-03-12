@@ -18,7 +18,6 @@ func TestSendMailSuccess(t *testing.T) {
 
 	ctx := context.Background()
 	emailConfig := mailer.Config{
-		From:    "test@example.com",
 		To:      "recipient@example.com",
 		Subject: "Test Email",
 		Html:    "<p>Hello, this is a test email</p>",
@@ -44,13 +43,9 @@ func TestSendMailWithCompleteConfig(t *testing.T) {
 
 	ctx := context.Background()
 	emailConfig := mailer.Config{
-		From:    "test@example.com",
 		To:      "recipient@example.com",
 		Subject: "Test Email",
 		Html:    "<p>Hello, this is a test email</p>",
-		Cc:      []string{"cc@example.com"},
-		Bcc:     []string{"bcc@example.com"},
-		ReplyTo: "reply@example.com",
 	}
 
 	expectedID := "email_12345"
@@ -73,7 +68,6 @@ func TestSendMailFailure(t *testing.T) {
 
 	ctx := context.Background()
 	emailConfig := mailer.Config{
-		From:    "test@example.com",
 		To:      "recipient@example.com",
 		Subject: "Test Email",
 		Html:    "<p>Hello, this is a test email</p>",

@@ -144,7 +144,6 @@ func (s *Service) sendWelcomeEmail(user *user.User) {
 	ctx := context.Background()
 
 	emailConfig := mailer.Config{
-		From:    "contact@alexandredissi.fr",
 		To:      user.Email,
 		Subject: "Bienvenue sur notre application",
 		Html:    "<p>Bonjour " + user.FirstName + ",</p><p>Merci de vous être inscrit sur notre application.</p>",
