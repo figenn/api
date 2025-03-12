@@ -7,6 +7,8 @@ import (
 	"figenn/internal/database"
 	"figenn/internal/user"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Repository struct {
@@ -44,7 +46,7 @@ func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*user.Us
 	return &u, nil
 }
 
-func (r *Repository) SavePasswordResetToken(ctx context.Context, id int, token string) (int, string, error) {
+func (r *Repository) SavePasswordResetToken(ctx context.Context, id uuid.UUID, token string) (uuid.UUID, string, error) {
 	currentTime := time.Now()
 	query := `UPDATE users 
               SET reset_password_token = $2, 
@@ -53,11 +55,12 @@ func (r *Repository) SavePasswordResetToken(ctx context.Context, id int, token s
               WHERE id = $1 
               RETURNING id, reset_password_token`
 
-	var returnedID int
+	var returnedID uuid.UUID
 	var returnedToken string
 	err := r.s.Pool().QueryRow(ctx, query, id, token, currentTime).Scan(&returnedID, &returnedToken)
 	if err != nil {
-		return 0, "", err
+		return uuid.Nil, "", err
+
 	}
 
 	return returnedID, returnedToken, nil
@@ -73,8 +76,8 @@ func (r *Repository) ValidateResetToken(ctx context.Context, token string) error
 	return nil
 }
 
-func (r *Repository) GetUserIDByResetToken(ctx context.Context, token string) (int, bool, error) {
-	var userID int
+func (r *Repository) GetUserIDByResetToken(ctx context.Context, token string) (uuid.UUID, bool, error) {
+	var userID uuid.UUID
 	var dateResetPassword time.Time
 
 	query := `SELECT id, date_reset_password 
@@ -85,19 +88,19 @@ func (r *Repository) GetUserIDByResetToken(ctx context.Context, token string) (i
 	err := r.s.Pool().QueryRow(ctx, query, token).Scan(&userID, &dateResetPassword)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return 0, false, nil
+			return uuid.Nil, false, nil
 		}
-		return 0, false, err
+		return uuid.Nil, false, err
 	}
 
 	if time.Since(dateResetPassword) > 24*time.Hour {
-		return 0, false, nil
+		return uuid.Nil, false, nil
 	}
 
 	return userID, true, nil
 }
 
-func (r *Repository) ClearResetToken(ctx context.Context, userID int) error {
+func (r *Repository) ClearResetToken(ctx context.Context, userID uuid.UUID) error {
 	query := `UPDATE users 
               SET reset_password_token = NULL, 
                   is_resetting_password = false, 
@@ -108,7 +111,7 @@ func (r *Repository) ClearResetToken(ctx context.Context, userID int) error {
 	return err
 }
 
-func (r *Repository) ResetPassword(ctx context.Context, userID int, hashedPassword string) error {
+func (r *Repository) ResetPassword(ctx context.Context, userID uuid.UUID, hashedPassword string) error {
 	query := `UPDATE users SET password = $2 WHERE id = $1`
 
 	result, err := r.s.Pool().Exec(ctx, query, userID, hashedPassword)

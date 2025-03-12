@@ -7,12 +7,13 @@ import (
 	"errors"
 	"figenn/internal/mailer"
 	"figenn/internal/user"
+	"figenn/internal/utils"
 	"log"
-	"regexp"
 	"time"
 
 	"github.com/bluele/gcache"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -43,11 +44,11 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		return nil, ErrMissingFields
 	}
 
-	if !isValidEmail(req.Email) {
+	if !utils.IsValidEmail(req.Email) {
 		return nil, ErrInvalidEmail
 	}
 
-	if !isStrongPassword(req.Password) {
+	if !utils.IsStrongPassword(req.Password) {
 		return nil, ErrPasswordTooWeak
 	}
 
@@ -60,7 +61,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		return nil, ErrUserExists
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
+	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +70,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		Email:             req.Email,
 		FirstName:         req.FirstName,
 		LastName:          req.LastName,
-		Password:          string(hashedPassword),
+		Password:          hashedPassword,
 		ProfilePictureUrl: "https://api.dicebear.com/7.x/initials/svg?seed=" + string(req.FirstName[0]) + string(req.LastName[0]),
 		Country:           req.Country,
 	}
@@ -83,7 +84,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		log.Println("Failed to cache user", cacheErr)
 	}
 
-	go s.sendWelcomeEmail(newUser)
+	go utils.SendWelcomeEmail(s.mailer, newUser)
 
 	return &RegisterResponse{
 		Message: "User created successfully",
@@ -95,7 +96,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, ErrMissingFields
 	}
 
-	if !isValidEmail(req.Email) {
+	if !utils.IsValidEmail(req.Email) {
 		return nil, ErrInvalidEmail
 	}
 
@@ -104,8 +105,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, ErrInvalidCredentials
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password))
-	if err != nil {
+	if !utils.ComparePassword(user.Password, req.Password) {
 		return nil, ErrInvalidCredentials
 	}
 
@@ -132,7 +132,7 @@ func (s *Service) ForgotPassword(ctx context.Context, req ForgotPasswordRequest)
 		return ErrMissingFields
 	}
 
-	if !isValidEmail(req.Email) {
+	if !utils.IsValidEmail(req.Email) {
 		return ErrInvalidEmail
 	}
 
@@ -155,63 +155,9 @@ func (s *Service) ForgotPassword(ctx context.Context, req ForgotPasswordRequest)
 	}
 
 	resetUrl := s.config.AppURL + "/auth/reset-password?token=" + token
-	go s.sendResetPasswordEmail(user, resetUrl)
+	go utils.SendResetPasswordEmail(s.mailer, user, resetUrl)
 
 	return nil
-}
-
-func isValidEmail(email string) bool {
-	return regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`).MatchString(email)
-}
-
-func isStrongPassword(password string) bool {
-	if len(password) < 8 {
-		return false
-	}
-
-	hasNumber := regexp.MustCompile(`[0-9]`).MatchString(password)
-
-	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString(password)
-
-	return hasNumber && hasUpper
-}
-
-func (s *Service) sendWelcomeEmail(user *user.User) {
-	ctx := context.Background()
-
-	emailConfig := mailer.Config{
-		To:      user.Email,
-		Subject: "Welcome to our application",
-		Html:    "<p>Hello " + user.FirstName + ",</p><p>Thank you for signing up for our application.</p>",
-	}
-
-	_, err := s.mailer.SendMail(ctx, emailConfig)
-	if err != nil {
-		log.Println("Failed to send welcome email", err)
-	}
-}
-
-func (s *Service) sendResetPasswordEmail(user *user.User, resetLink string) {
-	ctx := context.Background()
-
-	emailConfig := mailer.Config{
-		To:      user.Email,
-		Subject: "Password Reset",
-		Html:    "<p>Hello " + user.FirstName + " " + user.LastName + ",</p><p>Click the following link to reset your password: <a href=\"" + resetLink + "\">Reset Password</a></p>",
-	}
-
-	_, err := s.mailer.SendMail(ctx, emailConfig)
-	if err != nil {
-		log.Println("Failed to send reset password email", err)
-	}
-}
-
-func generateSecureToken() string {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return ""
-	}
-	return base64.URLEncoding.EncodeToString(b)
 }
 
 func (s *Service) ValidateResetToken(ctx context.Context, token string) error {
@@ -240,25 +186,25 @@ func (s *Service) ResetPassword(ctx context.Context, req ResetPasswordRequest) e
 		return ErrMissingFields
 	}
 
-	if !isStrongPassword(req.Password) {
+	if !utils.IsStrongPassword(req.Password) {
 		return ErrPasswordTooWeak
 	}
 
-	var userID int
+	var userID uuid.UUID
 	tokenValue, err := s.cache.Get(req.Token)
 	if err == nil {
-		id, ok := tokenValue.(int)
+		id, ok := tokenValue.(uuid.UUID)
 		if ok {
 			userID = id
 		}
 	}
 
-	if userID == 0 {
+	if userID == uuid.Nil {
 		id, valid, dbErr := s.repo.GetUserIDByResetToken(ctx, req.Token)
 		if dbErr != nil || !valid {
 			return ErrInvalidToken
 		}
-		userID = id
+		userID = uuid.UUID(id)
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
@@ -277,4 +223,12 @@ func (s *Service) ResetPassword(ctx context.Context, req ResetPasswordRequest) e
 	}
 
 	return nil
+}
+
+func generateSecureToken() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
+	return base64.URLEncoding.EncodeToString(b)
 }
