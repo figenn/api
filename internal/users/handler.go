@@ -1,4 +1,3 @@
-// api.go (ton code de l'API user)
 package users
 
 import (

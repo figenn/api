@@ -3,6 +3,7 @@ package server
 import (
 	"figenn/internal/auth"
 	"figenn/internal/mailer"
+	"figenn/internal/stripe"
 	"figenn/internal/users"
 	"fmt"
 	"net/http"
@@ -20,6 +21,7 @@ func (s *Server) SetupRoutes() {
 	s.setupAuthRoutes(apiGroup)
 
 	s.setupUserRoutes(apiGroup)
+	s.setupStripeRoutes(apiGroup)
 }
 
 func (s *Server) setupAuthRoutes(apiGroup *echo.Group) {
@@ -30,6 +32,11 @@ func (s *Server) setupAuthRoutes(apiGroup *echo.Group) {
 func (s *Server) setupUserRoutes(apiGroup *echo.Group) {
 	userAPI := s.newUserAPI()
 	userAPI.Bind(apiGroup)
+}
+
+func (s *Server) setupStripeRoutes(apiGroup *echo.Group) {
+	stripeAPI := s.newStripeAPI()
+	stripeAPI.Bind(apiGroup)
 }
 
 func (s *Server) newAuthAPI() *auth.API {
@@ -47,6 +54,11 @@ func (s *Server) newUserAPI() *users.API {
 	userRepo := users.NewRepository(s.db)
 	authService := users.NewService(userRepo)
 	return users.NewAPI(s.config.JWTSecret, authService)
+}
+
+func (s *Server) newStripeAPI() *stripe.API {
+	stripeService := stripe.NewStripeClient(os.Getenv("STRIPE_SECRET_KEY"))
+	return stripe.NewAPI(stripeService)
 }
 
 func (s *Server) healthHandler(c echo.Context) error {
