@@ -45,7 +45,7 @@ func (s *Server) newAuthAPI() *auth.API {
 		JWTSecret:     s.config.JWTSecret,
 		TokenDuration: time.Hour * 24 * 5, // 5 jours
 		AppURL:        os.Getenv("APP_URL"),
-	}, mailer.NewMailer(os.Getenv("RESEND_API_KEY")))
+	}, mailer.NewMailer())
 
 	return auth.NewAPI(authService)
 }

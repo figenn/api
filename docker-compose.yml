@@ -44,8 +44,22 @@ services:
       start_period: 15s
     networks:
       - blueprint
+  mailhog:
+    image: mailhog/mailhog:latest
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - blueprint
+    environment:
+      MH_STORAGE: maildir
+      MH_MAILDIR_PATH: /tmp
+    volumes:
+      - mailhog_data:/tmp
 
 volumes:
   psql_volume_bp:
+  mailhog_data:
 networks:
   blueprint:
