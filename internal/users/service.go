@@ -2,7 +2,6 @@ package users
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/bluele/gcache"
@@ -25,7 +24,7 @@ func (s *Service) GetUserInfos(ctx context.Context, id string) (*UserRequest, er
 		if user, ok := cached.(*UserRequest); ok {
 			return user, nil
 		}
-		return nil, fmt.Errorf("invalid type in cache")
+		return nil, err
 	}
 
 	user, err := s.repo.GetUser(ctx, id)

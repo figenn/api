@@ -33,28 +33,27 @@ func (a *API) Bind(rg *echo.Group) {
 func (a *API) HandleCreateCheckoutSession(c echo.Context) error {
 	var params CheckoutSessionParams
 	if err := c.Bind(&params); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Invalid request parameters",
+		return c.JSON(http.StatusBadRequest, echo.Map{
+			"error": "Invalid request body",
 		})
 	}
 
 	session, err := a.service.CreateCheckoutSession(&params)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{
+		return c.JSON(http.StatusInternalServerError,echo.Map{
 			"error": "Failed to create checkout session",
 		})
 	}
 
-	return c.JSON(http.StatusOK, map[string]string{
-		"session_id": session.ID,
-		"url":        session.URL,
+	return c.JSON(http.StatusOK, echo.Map{
+		"url": session.URL,
 	})
 }
 
 func (a *API) HandleGetSubscription(c echo.Context) error {
 	subscriptionID := c.Param("id")
 	if subscriptionID == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{
+		return c.JSON(http.StatusBadRequest, echo.Map{
 			"error": "Subscription ID is required",
 		})
 	}

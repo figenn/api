@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"figenn/internal/database"
-	"fmt"
 )
 
 type Repository struct {
@@ -33,10 +32,8 @@ func (r *Repository) GetUser(ctx context.Context, id string) (*UserRequest, erro
 		&u.CreatedAt,
 	)
 
-	fmt.Println(err)
-
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, err
+		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
