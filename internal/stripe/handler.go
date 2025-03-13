@@ -34,7 +34,7 @@ func (a *API) HandleCreateCheckoutSession(c echo.Context) error {
 	var params CheckoutSessionParams
 	if err := c.Bind(&params); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{
-			"error": "Invalid request body",
+			"error": "Invalid request parameters",
 		})
 	}
 
