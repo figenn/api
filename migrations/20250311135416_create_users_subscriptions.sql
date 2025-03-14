@@ -31,15 +31,26 @@ CREATE TABLE subscriptions (
     start_date TIMESTAMP NOT NULL,
     price DECIMAL(10,2) NOT NULL CHECK (price >= 0),
     logo_url VARCHAR(512),
+    payment_method VARCHAR(30),
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE powens_accounts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,  
+    powens_id INT NOT NULL UNIQUE,
+    access_token VARCHAR(512),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Index pour optimiser les recherches
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_stripe ON users(stripe_customer_id);
 CREATE INDEX idx_subscriptions_user ON subscriptions(user_id);
+CREATE INDEX idx_powens_access_token ON powens_accounts(access_token);
 
 -- +goose Down
 DROP TABLE IF EXISTS subscriptions;
 DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS powens_accounts;

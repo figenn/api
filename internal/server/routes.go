@@ -3,6 +3,7 @@ package server
 import (
 	"figenn/internal/auth"
 	"figenn/internal/mailer"
+	"figenn/internal/powens"
 	"figenn/internal/stripe"
 	"figenn/internal/users"
 	"fmt"
@@ -22,6 +23,8 @@ func (s *Server) SetupRoutes() {
 
 	s.setupUserRoutes(apiGroup)
 	s.setupStripeRoutes(apiGroup)
+	s.SetupPowensApi().Bind(apiGroup)
+
 }
 
 func (s *Server) setupAuthRoutes(apiGroup *echo.Group) {
@@ -59,6 +62,27 @@ func (s *Server) newUserAPI() *users.API {
 func (s *Server) newStripeAPI() *stripe.API {
 	stripeService := stripe.NewStripeClient(os.Getenv("STRIPE_SECRET_KEY"))
 	return stripe.NewAPI(stripeService)
+}
+
+func (s *Server) SetupPowensApi() *powens.API {
+	clientID := os.Getenv("POWENS_CLIENT_ID")
+	clientSecret := os.Getenv("POWENS_CLIENT_SECRET")
+	domain := os.Getenv("POWENS_DOMAIN")
+	callbackURI := os.Getenv("POWENS_REDIRECT_URI")
+
+	config := &powens.Config{
+		ClientID:    clientID,
+		Domain:      domain,
+		CallbackURI: callbackURI,
+	}
+
+	client := powens.NewClient(clientID, clientSecret)
+
+	repo := powens.NewRepository(s.db)
+
+	service := powens.NewService(repo, client, config)
+
+	return powens.NewAPI(service)
 }
 
 func (s *Server) healthHandler(c echo.Context) error {
