@@ -5,6 +5,7 @@ import (
 	"figenn/internal/mailer"
 	"figenn/internal/powens"
 	"figenn/internal/stripe"
+	"figenn/internal/subscriptions"
 	"figenn/internal/users"
 	"fmt"
 	"net/http"
@@ -24,6 +25,7 @@ func (s *Server) SetupRoutes() {
 	s.setupUserRoutes(apiGroup)
 	s.setupStripeRoutes(apiGroup)
 	s.SetupPowensApi().Bind(apiGroup)
+	s.setupSubscriptionRoutes(apiGroup)
 
 }
 
@@ -40,6 +42,11 @@ func (s *Server) setupUserRoutes(apiGroup *echo.Group) {
 func (s *Server) setupStripeRoutes(apiGroup *echo.Group) {
 	stripeAPI := s.newStripeAPI()
 	stripeAPI.Bind(apiGroup)
+}
+
+func (s *Server) setupSubscriptionRoutes(apiGroup *echo.Group) {
+	subscriptionAPI := s.SetupSubscriptionAPI()
+	subscriptionAPI.Bind(apiGroup)
 }
 
 func (s *Server) newAuthAPI() *auth.API {
@@ -83,6 +90,12 @@ func (s *Server) SetupPowensApi() *powens.API {
 	service := powens.NewService(repo, client, config)
 
 	return powens.NewAPI(service)
+}
+
+func (s *Server) SetupSubscriptionAPI() *subscriptions.API {
+	subscriptionsRepo := subscriptions.NewRepository(s.db)
+	subscriptionsService := subscriptions.NewService(subscriptionsRepo)
+	return subscriptions.NewAPI(s.config.JWTSecret, subscriptionsService)
 }
 
 func (s *Server) healthHandler(c echo.Context) error {

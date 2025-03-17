@@ -18,9 +18,10 @@ type Config struct {
 }
 
 type Server struct {
-	db     database.DbService
-	router *echo.Echo
-	config Config
+	db        database.DbService
+	router    *echo.Echo
+	config    Config
+	JWTSecret string
 }
 
 func NewServer(db database.DbService, config Config) *Server {
@@ -37,9 +38,10 @@ func NewServer(db database.DbService, config Config) *Server {
 	}))
 
 	return &Server{
-		db:     db,
-		router: e,
-		config: config,
+		db:        db,
+		router:    e,
+		config:    config,
+		JWTSecret: config.JWTSecret,
 	}
 }
 

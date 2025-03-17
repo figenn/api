@@ -29,9 +29,10 @@ CREATE TABLE subscriptions (
     color VARCHAR(20),
     description TEXT,
     start_date TIMESTAMP NOT NULL,
+    end_date TIMESTAMP,
     price DECIMAL(10,2) NOT NULL CHECK (price >= 0),
-    logo_url VARCHAR(512),
-    payment_method VARCHAR(30),
+    logo_url VARCHAR(255),
+    is_recuring BOOLEAN DEFAULT TRUE,
     active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
