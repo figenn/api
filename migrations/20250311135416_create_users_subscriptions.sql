@@ -22,19 +22,19 @@ CREATE TABLE users (
 );
 
 CREATE TABLE subscriptions (
-    id SERIAL PRIMARY KEY,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name VARCHAR(30) NOT NULL,
-    category VARCHAR(30),
-    color VARCHAR(20),
-    description TEXT,
-    start_date TIMESTAMP NOT NULL,
-    end_date TIMESTAMP,
-    price DECIMAL(10,2) NOT NULL CHECK (price >= 0),
-    logo_url VARCHAR(255),
-    is_recuring BOOLEAN DEFAULT TRUE,
-    active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name VARCHAR(30) NOT NULL,
+  category VARCHAR(30),
+  color VARCHAR(20),
+  description TEXT,
+  start_date DATE NOT NULL,
+  end_date DATE,
+  price DECIMAL(10,2) NOT NULL CHECK (price >= 0),
+  logo_url VARCHAR(255),
+  billing_cycle VARCHAR(20) NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE powens_accounts (
@@ -50,6 +50,11 @@ CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_stripe ON users(stripe_customer_id);
 CREATE INDEX idx_subscriptions_user ON subscriptions(user_id);
 CREATE INDEX idx_powens_access_token ON powens_accounts(access_token);
+CREATE INDEX idx_subscriptions_user_active ON subscriptions(user_id, is_active);
+CREATE INDEX idx_subscriptions_start_date ON subscriptions(start_date);
+CREATE INDEX idx_subscriptions_end_date ON subscriptions(end_date);
+CREATE INDEX idx_subscriptions_billing_cycle ON subscriptions(billing_cycle, start_date);
+
 
 -- +goose Down
 DROP TABLE IF EXISTS subscriptions;
