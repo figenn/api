@@ -102,8 +102,8 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 	}
 
 	user, err := s.repo.GetUserByEmail(ctx, req.Email)
-	if err != nil && !errors.Is(err, ErrUserNotFound) {
-		return nil, ErrInvalidCredentials
+	if err != nil {
+		return nil, ErrUserNotFound
 	}
 
 	if !utils.ComparePassword(user.Password, req.Password) {

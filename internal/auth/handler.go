@@ -64,27 +64,19 @@ func (a *API) Register(c echo.Context) error {
 }
 
 func (a *API) Login(c echo.Context) error {
-	var req LoginRequest
+	email := c.FormValue("email")
+	password := c.FormValue("password")
 
-	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Request format is invalid",
-		})
+	req := LoginRequest{
+		Email:    email,
+		Password: password,
 	}
 
 	resp, err := a.service.Login(c.Request().Context(), req)
 	if err != nil {
-		switch {
-		case errors.Is(err, ErrInvalidCredentials) || errors.Is(err, ErrInvalidEmail):
-			return c.JSON(http.StatusUnauthorized, ErrorResponse{
-				Error: ErrInvalidCredentials.Error(),
-			})
-
-		default:
-			return c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Error: ErrInternalServer.Error(),
-			})
-		}
+		return c.JSON(http.StatusUnauthorized, ErrorResponse{
+			Error: err.Error(),
+		})
 	}
 
 	return c.JSON(http.StatusOK, resp)
