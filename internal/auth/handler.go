@@ -27,18 +27,11 @@ func (a *API) Bind(rg *echo.Group) {
 }
 
 func (a *API) Register(c echo.Context) error {
-	firstName := c.FormValue("first_name")
-	lastName := c.FormValue("last_name")
-	email := c.FormValue("email")
-	password := c.FormValue("password")
-	country := c.FormValue("country")
-
-	req := RegisterRequest{
-		FirstName: firstName,
-		LastName:  lastName,
-		Email:     email,
-		Password:  password,
-		Country:   country,
+	var req RegisterRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error: "Request format is invalid",
+		})
 	}
 
 	if err := c.Bind(&req); err != nil {
@@ -76,12 +69,11 @@ func (a *API) Register(c echo.Context) error {
 }
 
 func (a *API) Login(c echo.Context) error {
-	email := c.FormValue("email")
-	password := c.FormValue("password")
-
-	req := LoginRequest{
-		Email:    email,
-		Password: password,
+	var req LoginRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, ErrorResponse{
+			Error: "Request format is invalid",
+		})
 	}
 
 	resp, err := a.service.Login(c.Request().Context(), req)
