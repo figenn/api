@@ -1,11 +1,11 @@
 package auth
 
 type RegisterRequest struct {
-	FirstName string `json:"first_name" form:"first_name"`
-	LastName  string `json:"last_name" form:"last_name"`
-	Email     string `json:"email" form:"email"`
-	Password  string `json:"password" form:"password"`
-	Country   string `json:"country" form:"country"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	Email     string `json:"email"`
+	Password  string `json:"password"`
+	Country   string `json:"country"`
 }
 
 type RegisterResponse struct {

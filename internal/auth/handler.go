@@ -27,7 +27,19 @@ func (a *API) Bind(rg *echo.Group) {
 }
 
 func (a *API) Register(c echo.Context) error {
-	var req RegisterRequest
+	firstName := c.FormValue("first_name")
+	lastName := c.FormValue("last_name")
+	email := c.FormValue("email")
+	password := c.FormValue("password")
+	country := c.FormValue("country")
+
+	req := RegisterRequest{
+		FirstName: firstName,
+		LastName:  lastName,
+		Email:     email,
+		Password:  password,
+		Country:   country,
+	}
 
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, ErrorResponse{
