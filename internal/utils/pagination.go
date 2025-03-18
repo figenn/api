@@ -8,14 +8,15 @@ import (
 )
 
 func GetPaginationParams(c echo.Context) (int, int, error) {
+	pageStr := c.QueryParam("page")
 	limitStr := c.QueryParam("limit")
-	offsetStr := c.QueryParam("offset")
 
 	if limitStr == "" {
-		limitStr = strconv.Itoa(10)
+		limitStr = "10"
 	}
-	if offsetStr == "" {
-		offsetStr = "0"
+
+	if pageStr == "" {
+		pageStr = "1"
 	}
 
 	limit, err := strconv.Atoi(limitStr)
@@ -23,10 +24,12 @@ func GetPaginationParams(c echo.Context) (int, int, error) {
 		return 0, 0, errors.New("Invalid limit")
 	}
 
-	offset, err := strconv.Atoi(offsetStr)
-	if err != nil || offset < 0 {
-		return 0, 0, errors.New("Invalid offset")
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		return 0, 0, errors.New("Invalid page number")
 	}
+
+	offset := (page - 1) * limit
 
 	return limit, offset, nil
 }

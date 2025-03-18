@@ -3,8 +3,10 @@ package subscriptions
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"figenn/internal/database"
-	"fmt"
+
+	"github.com/Masterminds/squirrel"
 )
 
 type Repository struct {
@@ -18,138 +20,203 @@ func NewRepository(db database.DbService) *Repository {
 }
 
 func (r *Repository) CreateSubscription(ctx context.Context, sub *Subscription) error {
-	query := `
-        INSERT INTO subscriptions 
-        (user_id, name, category, color, description, start_date, price, logo_url)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        RETURNING id
-    `
-
-	var id string
-	err := r.s.Pool().QueryRow(
-		ctx,
-		query,
-		sub.UserId,
-		sub.Name,
-		sub.Category,
-		sub.Color,
-		sub.Description,
-		sub.StartDate,
-		sub.Price,
-		sub.LogoUrl,
-	).Scan(&id)
+	query, args, err := squirrel.Insert("subscriptions").
+		Columns("user_id", "name", "category", "color", "description", "start_date", "end_date", "price",
+			"logo_url", "billing_cycle", "is_active").
+		Values(sub.UserId, sub.Name, sub.Category, sub.Color, sub.Description, sub.StartDate, sub.EndDate,
+			sub.Price, sub.LogoUrl, sub.BillingCycle, sub.IsActive).
+		Suffix("RETURNING id").
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
 
 	if err != nil {
-		fmt.Println(err)
-		return err
+		return errors.New("failed to build insert query")
+	}
+
+	err = r.s.Pool().QueryRow(ctx, query, args...).Scan(&sub.Id)
+	if err != nil {
+		return errors.New("failed to execute insert query")
 	}
 
 	return nil
 }
 
-func (r *Repository) GetActiveSubscriptions(ctx context.Context, userID string, year int, month int) ([]*Subscription, error) {
+func (r *Repository) GetActiveSubscriptions(ctx context.Context, userID string, year, month int) ([]*Subscription, error) {
 	query := `
-        SELECT 
-            id,
-            user_id,
-            name,	
-            category,
-            color,
-            description,
-            start_date,
-            end_date,
-            price,
-            logo_url,
-            active,
-            is_recuring
-        FROM subscriptions
-        WHERE user_id = $1
-          AND active = TRUE
-          AND (
-            (EXTRACT(YEAR FROM start_date) = $2 AND EXTRACT(MONTH FROM start_date) = $3) OR
-            (end_date IS NOT NULL AND EXTRACT(YEAR FROM end_date) = $2 AND EXTRACT(MONTH FROM end_date) = $3) OR
-            (is_recuring = TRUE AND EXTRACT(YEAR FROM start_date) <= $2 AND EXTRACT(MONTH FROM start_date) <= $3)
-          )
+    SELECT id, user_id, name, category, color, description, start_date, end_date, price,
+           logo_url, is_active, billing_cycle
+    FROM subscriptions
+    WHERE user_id = $1
+    AND is_active = TRUE
+    AND (
+        -- Abonnements qui commencent ce mois-ci
+        (EXTRACT(YEAR FROM start_date) = $2 AND EXTRACT(MONTH FROM start_date) = $3)
+        
+        -- Abonnements qui se terminent ce mois-ci
+        OR (end_date IS NOT NULL AND EXTRACT(YEAR FROM end_date) = $2 AND EXTRACT(MONTH FROM end_date) = $3)
+        
+        -- Abonnements mensuels 
+        OR (billing_cycle = 'monthly' AND
+            (start_date <= DATE($2 || '-' || $3 || '-01'))
+           )
+        
+        -- Abonnements trimestriels 
+        OR (billing_cycle = 'quarterly' AND
+            (start_date <= DATE($2 || '-' || $3 || '-01')) AND
+            (MOD(EXTRACT(MONTH FROM start_date) - $3 + 12 * (EXTRACT(YEAR FROM start_date) - $2), 3) = 0)
+           )
+        
+        -- Abonnements semestriels
+        OR (billing_cycle = 'semi_annual' AND
+            (start_date <= DATE($2 || '-' || $3 || '-01')) AND
+            (MOD(EXTRACT(MONTH FROM start_date) - $3 + 12 * (EXTRACT(YEAR FROM start_date) - $2), 6) = 0)
+           )
+        
+        -- Abonnements annuels 
+        OR (billing_cycle = 'annual' AND
+            (start_date <= DATE($2 || '-' || $3 || '-01')) AND
+            (EXTRACT(MONTH FROM start_date) = $3)
+           )
+        
+        -- Abonnements one-time 
+        OR (billing_cycle = 'one_time' AND
+            (EXTRACT(YEAR FROM start_date) = $2 AND EXTRACT(MONTH FROM start_date) = $3)
+           )
+    )
+    ORDER BY start_date ASC
     `
 
 	rows, err := r.s.Pool().Query(ctx, query, userID, year, month)
 	if err != nil {
-		return nil, sql.ErrNoRows
+		return nil, errors.New("failed to execute query")
 	}
 	defer rows.Close()
 
-	var subs []*Subscription
+	var subscriptions []*Subscription
 	for rows.Next() {
 		var sub Subscription
-		err := rows.Scan(
+		if err := rows.Scan(
 			&sub.Id, &sub.UserId, &sub.Name, &sub.Category,
 			&sub.Color, &sub.Description, &sub.StartDate,
-			&sub.EndDate, &sub.Price, &sub.LogoUrl, &sub.Active, &sub.IsRecuring,
-		)
-		if err != nil {
-			return nil, err
+			&sub.EndDate, &sub.Price, &sub.LogoUrl, &sub.IsActive,
+			&sub.BillingCycle,
+		); err != nil {
+			return nil, errors.New("failed to scan row")
 		}
-		subs = append(subs, &sub)
+
+		subscriptions = append(subscriptions, &sub)
 	}
 
-	return subs, nil
+	if err := rows.Err(); err != nil {
+		return nil, errors.New("error while iterating rows")
+	}
+
+	return subscriptions, nil
 }
 
 func (r *Repository) GetAllSubscriptions(ctx context.Context, userID string, limit, offset int) ([]*Subscription, error) {
-	query := `
-		SELECT 
-			id,
-			user_id,
-			name,	
-			category,
-			color,
-			description,
-			start_date,
-			end_date,
-			price,
-			logo_url,
-			active,
-			is_recuring
-		FROM subscriptions
-		WHERE user_id = $1
-		ORDER BY created_at DESC
-		LIMIT $2
-		OFFSET $3
-	`
+	query, args, err := squirrel.Select("id", "user_id", "name", "category", "color", "description", "start_date", "end_date", "price", "logo_url", "is_active", "billing_cycle").
+		From("subscriptions").
+		Where(squirrel.Eq{"user_id": userID}).
+		Limit(uint64(limit)).
+		Offset(uint64(offset)).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
 
-	rows, err := r.s.Pool().Query(ctx, query, userID, limit, offset)
 	if err != nil {
-		return nil, sql.ErrNoRows
+		return nil, errors.New("failed to build select query")
+	}
+
+	rows, err := r.s.Pool().Query(ctx, query, args...)
+	if err != nil {
+		return nil, errors.New("failed to execute query")
 	}
 	defer rows.Close()
 
-	var subs []*Subscription
+	var subscriptions []*Subscription
 	for rows.Next() {
 		var sub Subscription
-		err := rows.Scan(
+		if err := rows.Scan(
 			&sub.Id, &sub.UserId, &sub.Name, &sub.Category,
 			&sub.Color, &sub.Description, &sub.StartDate,
-			&sub.EndDate, &sub.Price, &sub.LogoUrl, &sub.Active, &sub.IsRecuring,
-		)
-		if err != nil {
-			return nil, err
+			&sub.EndDate, &sub.Price, &sub.LogoUrl, &sub.IsActive,
+			&sub.BillingCycle,
+		); err != nil {
+			return nil, errors.New("failed to scan row")
 		}
-		subs = append(subs, &sub)
+
+		subscriptions = append(subscriptions, &sub)
 	}
 
-	return subs, nil
+	if err := rows.Err(); err != nil {
+		return nil, errors.New("error while iterating rows")
+	}
+
+	return subscriptions, nil
 }
 
 func (r *Repository) DeleteSubscription(ctx context.Context, userID, subID string) error {
-	query := `
-		DELETE FROM subscriptions
-		WHERE user_id = $1 AND id = $2
-	`
+	query, args, err := squirrel.Delete("subscriptions").
+		Where(squirrel.Eq{"user_id": userID}).
+		Where(squirrel.Eq{"id": subID}).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
 
-	_, err := r.s.Pool().Exec(ctx, query, userID, subID)
 	if err != nil {
-		return err
+		return errors.New("failed to build delete query")
+	}
+
+	_, err = r.s.Pool().Exec(ctx, query, args...)
+	if err != nil {
+		return errors.New("failed to execute delete query")
 	}
 
 	return nil
+}
+
+func (r *Repository) UpdateSubscription(ctx context.Context, userID, subID string, fields map[string]interface{}) error {
+	query, args, err := squirrel.Update("subscriptions").
+		SetMap(fields).
+		Where(squirrel.Eq{"user_id": userID}).Where(squirrel.Eq{"id": subID}).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
+
+	if err != nil {
+		return errors.New("failed to build update query")
+	}
+
+	_, err = r.s.Pool().Exec(ctx, query, args...)
+	if err != nil {
+		return errors.New("failed to execute update query")
+	}
+
+	return nil
+}
+
+func (r *Repository) GetSubscriptionByID(ctx context.Context, userID, subID string) (*Subscription, error) {
+	query, args, err := squirrel.Select(
+		"id", "user_id", "name", "category", "color", "description",
+		"start_date", "price", "logo_url", "is_active", "billing_cycle").
+		From("subscriptions").
+		Where(squirrel.Eq{"user_id": userID, "id": subID}).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
+
+	if err != nil {
+		return nil, errors.New("failed to build select query")
+	}
+
+	var sub Subscription
+	if err := r.s.Pool().QueryRow(ctx, query, args...).Scan(
+		&sub.Id, &sub.UserId, &sub.Name, &sub.Category, &sub.Color,
+		&sub.Description, &sub.StartDate, &sub.Price,
+		&sub.LogoUrl, &sub.IsActive, &sub.BillingCycle,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, errors.New("failed to execute query")
+	}
+
+	return &sub, nil
 }

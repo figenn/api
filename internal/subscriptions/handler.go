@@ -2,6 +2,7 @@ package subscriptions
 
 import (
 	"context"
+	"figenn/internal/errors"
 	"figenn/internal/users"
 	"figenn/internal/utils"
 	"net/http"
@@ -14,6 +15,8 @@ type SubscriptionStore interface {
 	GetActiveSubscriptions(ctx context.Context, userID string, year int, month int) ([]*Subscription, error)
 	GetAllSubscriptions(ctx context.Context, userID string, limit, offset int) ([]*Subscription, error)
 	DeleteSubscription(ctx context.Context, userID, subID string) error
+	UpdateSubscription(ctx context.Context, userID, subID string, req UpdateSubscriptionRequest) error
+	GetSubscription(ctx context.Context, userID, subID string) (*Subscription, error)
 }
 
 type API struct {
@@ -29,67 +32,65 @@ func NewAPI(secret string, service *Service) *API {
 }
 
 func (a *API) Bind(rg *echo.Group) {
-	subscriptionsGroup := rg.Group("/subscriptions", users.JWTMiddleware(a.JWTSecret))
-	subscriptionsGroup.GET("", a.GetAllSubscriptions)
-	subscriptionsGroup.POST("/create", a.CreateSubscription)
-	subscriptionsGroup.GET("/active", a.ListActiveSubscriptions)
-	subscriptionsGroup.DELETE("/:id", a.DeleteSubscription)
+	subGroup := rg.Group("/subscriptions", users.JWTMiddleware(a.JWTSecret))
+	subGroup.GET("", a.GetAllSubscriptions)
+	subGroup.POST("/create", a.CreateSubscription)
+	subGroup.GET("/active", a.ListActiveSubscriptions)
+	subGroup.DELETE("/:id", a.DeleteSubscription)
+	subGroup.PATCH("/:id", a.UpdateSubscription)
+	subGroup.GET("/:id", a.GetSubscription)
 }
 
 func (a *API) CreateSubscription(c echo.Context) error {
 	var req CreateSubscriptionRequest
-	if err := c.Bind(&req); err != nil || req.Name == "" || req.Price <= 0 {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Invalid request format",
-		})
+	if err := c.Bind(&req); err != nil {
+		return errors.NewBadRequestError("Invalid request format")
+	}
+
+	if !isValidBillingCycle(req.BillingCycle) {
+		return errors.NewBadRequestError("Invalid billing cycle value")
 	}
 
 	userID, ok := c.Get("user_id").(string)
 	if !ok {
-		return c.JSON(http.StatusUnauthorized, ErrorResponse{
-			Error: "Invalid user session",
-		})
+		return errors.NewUnauthorizedError("")
 	}
 
-	err := a.s.CreateSubscription(c.Request().Context(), userID, req)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error: "Failed to create subscription",
-		})
+	if err := a.s.CreateSubscription(c.Request().Context(), userID, req); err != nil {
+		return handleServiceError(err)
 	}
 
-	return c.JSON(http.StatusCreated, echo.Map{
-		"message": "Subscription created successfully",
-	})
+	return c.JSON(http.StatusCreated, echo.Map{"message": "Subscription created successfully"})
+}
+
+func isValidBillingCycle(cycle BillingCycleType) bool {
+	switch cycle {
+	case Monthly, Quarterly, SemiAnnual, Annual, OneTime:
+		return true
+	default:
+		return false
+	}
 }
 
 func (a *API) ListActiveSubscriptions(c echo.Context) error {
 	userID, ok := c.Get("user_id").(string)
 	if !ok {
-		return c.JSON(http.StatusUnauthorized, ErrorResponse{
-			Error: "Invalid user session",
-		})
+		return errors.NewUnauthorizedError("")
 	}
 
 	year, err := utils.ValidateYear(c.QueryParam("year"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: err.Error(),
-		})
+		return errors.NewBadRequestError(err.Error())
 	}
 
 	month, err := utils.ValidateMonth(c.QueryParam("month"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: err.Error(),
-		})
+		return errors.NewBadRequestError(err.Error())
 	}
 
 	subs, err := a.s.ListActiveSubscriptions(c.Request().Context(), userID, year, month)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error: "Failed to fetch subscriptions",
-		})
+		return errors.NewInternalServerError("Failed to fetch subscriptions")
 	}
 
 	return c.JSON(http.StatusOK, subs)
@@ -98,23 +99,17 @@ func (a *API) ListActiveSubscriptions(c echo.Context) error {
 func (a *API) GetAllSubscriptions(c echo.Context) error {
 	userID, ok := c.Get("user_id").(string)
 	if !ok {
-		return c.JSON(http.StatusUnauthorized, ErrorResponse{
-			Error: "Invalid user session",
-		})
+		return errors.NewUnauthorizedError("")
 	}
 
 	limit, offset, err := utils.GetPaginationParams(c)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: err.Error(),
-		})
+		return errors.NewBadRequestError(err.Error())
 	}
 
 	subs, err := a.s.GetAllSubscriptions(c.Request().Context(), userID, limit, offset)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error: "Failed to fetch subscriptions",
-		})
+		return errors.NewInternalServerError("Failed to fetch subscriptions")
 	}
 
 	return c.JSON(http.StatusOK, subs)
@@ -123,26 +118,75 @@ func (a *API) GetAllSubscriptions(c echo.Context) error {
 func (a *API) DeleteSubscription(c echo.Context) error {
 	userID, ok := c.Get("user_id").(string)
 	if !ok {
-		return c.JSON(http.StatusUnauthorized, ErrorResponse{
-			Error: "Invalid user session",
-		})
+		return errors.NewUnauthorizedError("")
 	}
 
 	subID := c.Param("id")
 	if subID == "" {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Invalid subscription ID",
-		})
+		return errors.NewBadRequestError("Invalid subscription ID")
 	}
 
-	err := a.s.DeleteSubscription(c.Request().Context(), userID, subID)
+	if err := a.s.DeleteSubscription(c.Request().Context(), userID, subID); err != nil {
+		return handleServiceError(err)
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"message": "Subscription deleted successfully"})
+}
+
+func (a *API) UpdateSubscription(c echo.Context) error {
+
+	userID, ok := c.Get("user_id").(string)
+	if !ok {
+		return errors.NewUnauthorizedError("")
+	}
+
+	subID := c.Param("id")
+	if subID == "" {
+		return errors.NewBadRequestError("Invalid subscription ID")
+	}
+
+	var req UpdateSubscriptionRequest
+	if err := c.Bind(&req); err != nil {
+		return errors.NewBadRequestError("Invalid request format")
+	}
+
+	if err := a.s.UpdateSubscription(c.Request().Context(), userID, subID, req); err != nil {
+		return handleServiceError(err)
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{"message": "Subscription updated successfully"})
+}
+
+func (a *API) GetSubscription(c echo.Context) error {
+	userID, ok := c.Get("user_id").(string)
+	if !ok {
+		return errors.NewUnauthorizedError("")
+	}
+
+	subID := c.Param("id")
+	if subID == "" {
+		return errors.NewBadRequestError("Invalid subscription ID")
+	}
+
+	sub, err := a.s.GetSubscription(c.Request().Context(), userID, subID)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Error: "Failed to delete subscription",
-		})
+		return handleServiceError(err)
 	}
 
-	return c.JSON(http.StatusOK, echo.Map{
-		"message": "Subscription deleted successfully",
-	})
+	return c.JSON(http.StatusOK, sub)
+}
+
+func handleServiceError(err error) error {
+	switch err {
+	case ErrUserIDAndSubIDRequired:
+		return errors.NewBadRequestError("User ID and Subscription ID are required")
+	case ErrSubscriptionNotFound:
+		return errors.NewNotFoundError("Subscription not found")
+	case ErrUserPermissionDenied:
+		return errors.NewForbiddenError("You are not authorized to perform this action")
+	case ErrFailedCreateSub:
+		return errors.NewInternalServerError("Failed to create subscription")
+	default:
+		return errors.NewInternalServerError("An unexpected error occurred")
+	}
 }
