@@ -2,17 +2,9 @@ package subscriptions
 
 import (
 	"context"
-	"encoding/json"
-	"io"
-	"net/http"
-	"strings"
 	"time"
 
 	"github.com/bluele/gcache"
-)
-
-const (
-	LogoUrl = "https://api.svgl.app?search="
 )
 
 type Service struct {
@@ -32,11 +24,6 @@ func (s *Service) CreateSubscription(ctx context.Context, userID string, req Cre
 		return ErrUserIDAndSubIDRequired
 	}
 
-	logo, err := fetchLogo(req.Name)
-	if err != nil {
-		logo = ""
-	}
-
 	subscription := &Subscription{
 		UserId:       userID,
 		Name:         req.Name,
@@ -45,7 +32,7 @@ func (s *Service) CreateSubscription(ctx context.Context, userID string, req Cre
 		Description:  req.Description,
 		StartDate:    *req.StartDate,
 		Price:        req.Price,
-		LogoUrl:      logo,
+		LogoUrl:      &req.LogoUrl,
 		BillingCycle: req.BillingCycle,
 		IsActive:     true,
 		CreatedAt:    time.Now(),
@@ -53,43 +40,6 @@ func (s *Service) CreateSubscription(ctx context.Context, userID string, req Cre
 	}
 
 	return s.repo.CreateSubscription(ctx, subscription)
-}
-
-func fetchLogo(name string) (string, error) {
-	cleanName := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
-	variants := []string{
-		cleanName,
-		strings.ReplaceAll(cleanName, "-", ""),
-		cleanName + "-logo",
-	}
-
-	for _, variant := range variants {
-		if logo, err := tryGetLogo(variant); err == nil {
-			return logo, nil
-		}
-	}
-
-	return "", ErrInvalidRequestFormat
-}
-
-func tryGetLogo(name string) (string, error) {
-	resp, err := http.Get(LogoUrl + name)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	var logos []LogoResponse
-	if err := json.Unmarshal(body, &logos); err != nil || len(logos) == 0 {
-		return "", ErrInvalidRequestFormat
-	}
-
-	return logos[0].Route, nil
 }
 
 func (s *Service) ListActiveSubscriptions(ctx context.Context, userID string, year, month int) ([]*Subscription, error) {
