@@ -23,11 +23,9 @@ type Subscription struct {
 type BillingCycleType string
 
 const (
-	Monthly    BillingCycleType = "monthly"
-	Quarterly  BillingCycleType = "quarterly"
-	SemiAnnual BillingCycleType = "semi_annual"
-	Annual     BillingCycleType = "annual"
-	OneTime    BillingCycleType = "one_time"
+	Monthly   BillingCycleType = "monthly"
+	Quarterly BillingCycleType = "quarterly"
+	Annual    BillingCycleType = "annual"
 )
 
 type CreateSubscriptionRequest struct {

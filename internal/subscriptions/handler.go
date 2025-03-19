@@ -65,7 +65,7 @@ func (a *API) CreateSubscription(c echo.Context) error {
 
 func isValidBillingCycle(cycle BillingCycleType) bool {
 	switch cycle {
-	case Monthly, Quarterly, SemiAnnual, Annual, OneTime:
+	case Monthly, Quarterly, Annual:
 		return true
 	default:
 		return false
