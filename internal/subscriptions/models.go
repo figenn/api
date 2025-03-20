@@ -15,7 +15,6 @@ type Subscription struct {
 	LogoUrl      *string          `json:"logo_url"`
 	IsActive     bool             `json:"is_active"`
 	BillingCycle BillingCycleType `json:"billing_cycle"`
-	BillingDate  time.Time        `json:"billing_date"`
 	CreatedAt    time.Time        `json:"created_at"`
 	UpdatedAt    time.Time        `json:"updated_at"`
 }
@@ -29,17 +28,16 @@ const (
 )
 
 type CreateSubscriptionRequest struct {
-	Name            string           `json:"name" form:"name"`
-	Category        string           `json:"category" form:"category"`
-	Color           string           `json:"color" form:"color"`
-	Description     string           `json:"description" form:"description"`
-	StartDate       *time.Time       `json:"start_date" form:"start_date"`
-	EndDate         *time.Time       `json:"end_date" form:"end_date"`
-	Price           float64          `json:"price" form:"price"`
-	LogoUrl         string           `json:"logo_url" form:"logo_url"`
-	NextBillingDate time.Time        `json:"next_billing_date" form:"next_billing_date"`
-	BillingCycle    BillingCycleType `json:"billing_cycle" form:"billing_cycle"`
-	IsRecuring      bool             `json:"is_recuring" form:"is_recuring"`
+	Name         string           `json:"name" form:"name"`
+	Category     string           `json:"category" form:"category"`
+	Color        string           `json:"color" form:"color"`
+	Description  string           `json:"description" form:"description"`
+	StartDate    *time.Time       `json:"start_date" form:"start_date"`
+	EndDate      *time.Time       `json:"end_date" form:"end_date"`
+	Price        float64          `json:"price" form:"price"`
+	LogoUrl      string           `json:"logo_url" form:"logo_url"`
+	BillingCycle BillingCycleType `json:"billing_cycle" form:"billing_cycle"`
+	IsRecuring   bool             `json:"is_recuring" form:"is_recuring"`
 }
 
 type LogoResponse struct {
