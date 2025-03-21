@@ -53,7 +53,7 @@ func (s *Server) newAuthAPI() *auth.API {
 	authRepo := auth.NewRepository(s.db)
 	authService := auth.NewService(authRepo, &auth.Config{
 		JWTSecret:     s.config.JWTSecret,
-		TokenDuration: time.Hour * 24 * 5, // 5 jours
+		TokenDuration: time.Hour * 24 * 7, // 5 jours
 		AppURL:        os.Getenv("APP_URL"),
 	}, mailer.NewMailer())
 

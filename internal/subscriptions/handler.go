@@ -39,6 +39,7 @@ func (a *API) Bind(rg *echo.Group) {
 	subGroup.DELETE("/:id", a.DeleteSubscription)
 	subGroup.PATCH("/:id", a.UpdateSubscription)
 	subGroup.GET("/:id", a.GetSubscription)
+	subGroup.GET("/active", a.CalculateActiveSubscriptions)
 }
 
 func (a *API) CreateSubscription(c echo.Context) error {
@@ -189,4 +190,38 @@ func handleServiceError(err error) error {
 	default:
 		return errors.NewInternalServerError("An unexpected error occurred")
 	}
+}
+
+func (a *API) CalculateActiveSubscriptions(c echo.Context) error {
+	userID, ok := c.Get("user_id").(string)
+	if !ok {
+		return errors.NewUnauthorizedError("")
+	}
+
+	yearStr := c.QueryParam("year")
+	monthStr := c.QueryParam("month")
+
+	var year, month *int
+	if yearStr != "" {
+		y, err := utils.ValidateYear(yearStr)
+		if err != nil {
+			return errors.NewBadRequestError(err.Error())
+		}
+		year = &y
+	}
+
+	if monthStr != "" {
+		m, err := utils.ValidateMonth(monthStr)
+		if err != nil {
+			return errors.NewBadRequestError(err.Error())
+		}
+		month = &m
+	}
+
+	subs, err := a.s.CalculateActiveSubscriptions(c.Request().Context(), userID, year, month)
+	if err != nil {
+		return errors.NewInternalServerError("Failed to fetch subscriptions")
+	}
+
+	return c.JSON(http.StatusOK, subs)
 }

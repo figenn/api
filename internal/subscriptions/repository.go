@@ -220,3 +220,56 @@ func (r *Repository) GetSubscriptionByID(ctx context.Context, userID, subID stri
 
 	return &sub, nil
 }
+
+func (r *Repository) CalculateActiveSubscriptionPrice(ctx context.Context, userID string, year, month *int) (float64, error) {
+	query := squirrel.Select("SUM(price)").From("subscriptions").Where(squirrel.Eq{"user_id": userID, "is_active": true})
+
+	if year != nil {
+		query = query.Where(squirrel.Or{
+			squirrel.And{
+				squirrel.LtOrEq{"EXTRACT(YEAR FROM start_date)": *year},
+				squirrel.Or{
+					squirrel.Eq{"end_date": nil},
+					squirrel.GtOrEq{"EXTRACT(YEAR FROM end_date)": *year},
+				},
+			},
+			squirrel.And{
+				squirrel.LtOrEq{"EXTRACT(YEAR FROM start_date)": *year},
+				squirrel.Eq{"EXTRACT(YEAR FROM start_date)": *year},
+				squirrel.Eq{"end_date": nil},
+			},
+		})
+	}
+
+	if month != nil {
+		query = query.Where(squirrel.Or{
+			squirrel.And{
+				squirrel.LtOrEq{"EXTRACT(MONTH FROM start_date)": *month},
+				squirrel.Or{
+					squirrel.Eq{"end_date": nil},
+					squirrel.GtOrEq{"EXTRACT(MONTH FROM end_date)": *month},
+				},
+			},
+			squirrel.And{
+				squirrel.LtOrEq{"EXTRACT(MONTH FROM start_date)": *month},
+				squirrel.Eq{"EXTRACT(MONTH FROM start_date)": *month},
+				squirrel.Eq{"end_date": nil},
+			},
+		})
+	}
+
+	query = query.PlaceholderFormat(squirrel.Dollar)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return 0, errors.New("failed to build select query")
+	}
+
+	var total float64
+	err = r.s.Pool().QueryRow(ctx, sqlQuery, args...).Scan(&total)
+	if err != nil {
+		return 0, errors.New("failed to execute query")
+	}
+
+	return total, nil
+}

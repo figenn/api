@@ -138,3 +138,16 @@ func (s *Service) GetSubscription(ctx context.Context, userID, subID string) (*S
 
 	return subscription, nil
 }
+
+func (s *Service) CalculateActiveSubscriptions(ctx context.Context, userID string, year, month *int) (float64, error) {
+	if userID == "" {
+		return 0, ErrUserIDAndSubIDRequired
+	}
+
+	total, err := s.repo.CalculateActiveSubscriptionPrice(ctx, userID, year, month)
+	if err != nil {
+		return 0, err
+	}
+
+	return total, nil
+}

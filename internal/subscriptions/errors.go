@@ -11,4 +11,5 @@ var (
 	ErrInvalidUserSession     = errors.New("Invalid user session, please log in again")
 	ErrInvalidSubscriptionID  = errors.New("he provided subscription ID is invalid")
 	ErrFailedCreateSub        = errors.New("Failed to create subscription")
+	ErrInvalidPeriod          = errors.New("Invalid period provided")
 )
