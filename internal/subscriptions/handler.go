@@ -39,7 +39,7 @@ func (a *API) Bind(rg *echo.Group) {
 	subGroup.DELETE("/:id", a.DeleteSubscription)
 	subGroup.PATCH("/:id", a.UpdateSubscription)
 	subGroup.GET("/:id", a.GetSubscription)
-	subGroup.GET("/active", a.CalculateActiveSubscriptions)
+	subGroup.GET("/calculate", a.CalculateActiveSubscriptions)
 }
 
 func (a *API) CreateSubscription(c echo.Context) error {
