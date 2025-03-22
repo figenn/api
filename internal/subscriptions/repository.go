@@ -277,7 +277,7 @@ func (r *Repository) CalculateActiveSubscriptionPrice(ctx context.Context, userI
 }
 
 func (r *Repository) GetUpcomingSubscriptions(ctx context.Context, userID string, week int) ([]*Subscription, error) {
-	query, args, err := squirrel.Select("id", "user_id", "name", "start_date", "color", "logo_url").
+	query, args, err := squirrel.Select("id", "user_id", "name", "start_date", "color", "logo_url, price").
 		From("subscriptions").
 		Where(squirrel.And{
 			squirrel.Eq{"user_id": userID},
@@ -303,7 +303,7 @@ func (r *Repository) GetUpcomingSubscriptions(ctx context.Context, userID string
 	var subscriptions []*Subscription
 	for rows.Next() {
 		var sub Subscription
-		if err := rows.Scan(&sub.Id, &sub.UserId, &sub.Name, &sub.StartDate, &sub.Color, &sub.LogoUrl); err != nil {
+		if err := rows.Scan(&sub.Id, &sub.UserId, &sub.Name, &sub.StartDate, &sub.Color, &sub.LogoUrl, &sub.Price); err != nil {
 			return nil, err
 		}
 		subscriptions = append(subscriptions, &sub)
