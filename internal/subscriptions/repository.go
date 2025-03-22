@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"figenn/internal/database"
+	"fmt"
 	"time"
 
 	"github.com/Masterminds/squirrel"
@@ -276,13 +277,14 @@ func (r *Repository) CalculateActiveSubscriptionPrice(ctx context.Context, userI
 }
 
 func (r *Repository) GetUpcomingSubscriptions(ctx context.Context, userID string, week int) ([]*Subscription, error) {
-	query, args, err := squirrel.Select("id", "user_id", "name", "start_date").
+	query, args, err := squirrel.Select("id", "user_id", "name", "start_date", "color", "logo_url").
 		From("subscriptions").
 		Where(squirrel.And{
 			squirrel.Eq{"user_id": userID},
 			squirrel.Expr("EXTRACT(WEEK FROM start_date) = ?", week),
 			squirrel.Expr("EXTRACT(YEAR FROM start_date) = ?", time.Now().Year()),
 		}).
+		Where(squirrel.Eq{"is_active": true}).
 		OrderBy("start_date ASC").
 		PlaceholderFormat(squirrel.Dollar).
 		ToSql()
@@ -293,6 +295,7 @@ func (r *Repository) GetUpcomingSubscriptions(ctx context.Context, userID string
 
 	rows, err := r.s.Pool().Query(ctx, query, args...)
 	if err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -300,7 +303,7 @@ func (r *Repository) GetUpcomingSubscriptions(ctx context.Context, userID string
 	var subscriptions []*Subscription
 	for rows.Next() {
 		var sub Subscription
-		if err := rows.Scan(&sub.Id, &sub.UserId, &sub.Name, &sub.StartDate); err != nil {
+		if err := rows.Scan(&sub.Id, &sub.UserId, &sub.Name, &sub.StartDate, &sub.Color, &sub.LogoUrl); err != nil {
 			return nil, err
 		}
 		subscriptions = append(subscriptions, &sub)
