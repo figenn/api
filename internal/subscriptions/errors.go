@@ -12,4 +12,5 @@ var (
 	ErrInvalidSubscriptionID  = errors.New("he provided subscription ID is invalid")
 	ErrFailedCreateSub        = errors.New("Failed to create subscription")
 	ErrInvalidPeriod          = errors.New("Invalid period provided")
+	ErrInvalidWeek            = errors.New("Invalid week provided")
 )

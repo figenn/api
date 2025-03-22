@@ -151,3 +151,15 @@ func (s *Service) CalculateActiveSubscriptions(ctx context.Context, userID strin
 
 	return total, nil
 }
+
+func (s *Service) GetUpcomingSubscriptions(ctx context.Context, userID string, week int) ([]*Subscription, error) {
+	if userID == "" {
+		return nil, ErrUserIDAndSubIDRequired
+	}
+
+	if week < 1 || week > 52 {
+		return nil, ErrInvalidWeek
+	}
+
+	return s.repo.GetUpcomingSubscriptions(ctx, userID, week)
+}

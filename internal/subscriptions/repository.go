@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"figenn/internal/database"
+	"time"
 
 	"github.com/Masterminds/squirrel"
 )
@@ -272,4 +273,38 @@ func (r *Repository) CalculateActiveSubscriptionPrice(ctx context.Context, userI
 	}
 
 	return total, nil
+}
+
+func (r *Repository) GetUpcomingSubscriptions(ctx context.Context, userID string, week int) ([]*Subscription, error) {
+	query, args, err := squirrel.Select("id", "user_id", "name", "start_date").
+		From("subscriptions").
+		Where(squirrel.And{
+			squirrel.Eq{"user_id": userID},
+			squirrel.Expr("EXTRACT(WEEK FROM start_date) = ?", week),
+			squirrel.Expr("EXTRACT(YEAR FROM start_date) = ?", time.Now().Year()),
+		}).
+		OrderBy("start_date ASC").
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
+
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := r.s.Pool().Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var subscriptions []*Subscription
+	for rows.Next() {
+		var sub Subscription
+		if err := rows.Scan(&sub.Id, &sub.UserId, &sub.Name, &sub.StartDate); err != nil {
+			return nil, err
+		}
+		subscriptions = append(subscriptions, &sub)
+	}
+
+	return subscriptions, nil
 }

@@ -6,6 +6,7 @@ import (
 	"figenn/internal/users"
 	"figenn/internal/utils"
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 )
@@ -40,6 +41,7 @@ func (a *API) Bind(rg *echo.Group) {
 	subGroup.PATCH("/:id", a.UpdateSubscription)
 	subGroup.GET("/:id", a.GetSubscription)
 	subGroup.GET("/calculate", a.CalculateActiveSubscriptions)
+	subGroup.GET("/upcoming", a.GetUpcomingSubscriptions)
 }
 
 func (a *API) CreateSubscription(c echo.Context) error {
@@ -219,6 +221,30 @@ func (a *API) CalculateActiveSubscriptions(c echo.Context) error {
 	}
 
 	subs, err := a.s.CalculateActiveSubscriptions(c.Request().Context(), userID, year, month)
+	if err != nil {
+		return errors.NewInternalServerError("Failed to fetch subscriptions")
+	}
+
+	return c.JSON(http.StatusOK, subs)
+}
+
+func (a *API) GetUpcomingSubscriptions(c echo.Context) error {
+	userID, ok := c.Get("user_id").(string)
+	if !ok {
+		return errors.NewUnauthorizedError("")
+	}
+
+	week := c.QueryParam("week")
+	if week == "" {
+		return errors.NewBadRequestError("Week is required")
+	}
+
+	weekInt, err := strconv.Atoi(week)
+	if err != nil {
+		return errors.NewBadRequestError("Invalid week value")
+	}
+
+	subs, err := a.s.GetUpcomingSubscriptions(c.Request().Context(), userID, weekInt)
 	if err != nil {
 		return errors.NewInternalServerError("Failed to fetch subscriptions")
 	}
