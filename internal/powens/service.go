@@ -3,7 +3,12 @@ package powens
 import (
 	"context"
 	"errors"
+	"figenn/internal/subscriptions"
+	"fmt"
+	"math"
 	"net/url"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -19,10 +24,11 @@ type Service struct {
 	repo   *Repository
 	client *Client
 	config *Config
+	r      *subscriptions.Repository
 }
 
-func NewService(repo *Repository, client *Client, config *Config) *Service {
-	return &Service{repo: repo, client: client, config: config}
+func NewService(repo *Repository, client *Client, config *Config, subscriptionRepository *subscriptions.Repository) *Service {
+	return &Service{repo: repo, client: client, config: config, r: subscriptionRepository}
 }
 
 func (s *Service) CreateAccount(ctx echo.Context, userID uuid.UUID) (*string, error) {
@@ -54,4 +60,71 @@ func (s *Service) CreateAccount(ctx echo.Context, userID uuid.UUID) (*string, er
 	constructedURL := "https://webview.powens.com/connect?" + urlValues.Encode()
 
 	return &constructedURL, nil
+}
+
+type SubscriptionAuto struct {
+	Name     string
+	Date     string
+	Amount   string
+	Category string
+}
+
+func (s *Service) ListTransactions(ctx echo.Context, userId string) error {
+
+	fmt.Println(userId)
+
+	token, err := s.repo.GetPowensAccount(context.Background(), userId)
+	if err != nil {
+		return err
+	}
+
+	response, err := s.client.GetTransactions(ctx, 108, *token)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	subscriptionAutoList := []subscriptions.Subscription{}
+	addedServices := make(map[string]bool)
+
+	for _, t := range response.Transactions {
+		if addedServices[t.SimplifiedWording] {
+			continue
+		}
+		for _, sub := range SubscriptionNames {
+			if t.SimplifiedWording == sub.Name {
+
+				parsedDate, err := time.Parse("2006-01-02", t.Date)
+				if err != nil {
+					return err
+				}
+
+				strings.ToLower(t.SimplifiedWording)
+				strings.ReplaceAll(t.SimplifiedWording, " ", "")
+				// Assurez-vous que Price soit de type float64
+				subscriptionAuto := subscriptions.Subscription{
+					UserId:    userId,
+					Name:      sub.Name,
+					Price:     math.Abs(t.Value), // Conversion en valeur absolue de type float64
+					Category:  sub.Category,
+					StartDate: parsedDate,
+				}
+
+				subscriptionAutoList = append(subscriptionAutoList, subscriptionAuto)
+				addedServices[t.SimplifiedWording] = true
+				break
+			}
+		}
+	}
+
+	// Insert each subscription individually
+	for _, subscription := range subscriptionAutoList {
+		err := s.r.CreateSubscription(context.Background(), &subscription) // Pass reference to Subscription
+		if err != nil {
+			fmt.Println("Error while inserting subscription:", err)
+			continue
+		}
+	}
+
+	return nil
 }

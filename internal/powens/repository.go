@@ -3,6 +3,7 @@ package powens
 import (
 	"context"
 	"figenn/internal/database"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,4 +30,20 @@ func (r *Repository) SetPowensAccount(ctx context.Context, userID uuid.UUID, pow
     `
 	_, err := r.s.Pool().Exec(ctx, query, userID.String(), powensID, accessToken, time.Now())
 	return err
+}
+
+func (r *Repository) GetPowensAccount(ctx context.Context, userID string) (*string, error) {
+	query := `
+		SELECT access_token
+		FROM powens_accounts
+		WHERE user_id = $1
+	`
+
+	var accessToken string
+	err := r.s.Pool().QueryRow(ctx, query, userID).Scan(&accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get powens account: %w", err)
+	}
+
+	return &accessToken, nil
 }

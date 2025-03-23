@@ -32,11 +32,13 @@ func (r *Repository) CreateSubscription(ctx context.Context, sub *Subscription) 
 		ToSql()
 
 	if err != nil {
+		fmt.Println(err)
 		return errors.New("failed to build insert query")
 	}
 
 	err = r.s.Pool().QueryRow(ctx, query, args...).Scan(&sub.Id)
 	if err != nil {
+		fmt.Println(err)
 		return errors.New("failed to execute insert query")
 	}
 

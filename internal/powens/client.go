@@ -2,9 +2,10 @@ package powens
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
-	"time"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -17,22 +18,19 @@ const (
 	EndpointAuthToken = "/auth/token"
 )
 
+type HTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 type Client struct {
-	hc           *http.Client
+	httpClient   HTTPClient
 	clientID     string
 	clientSecret string
 }
 
-func NewClient(clientID, clientSecret string) *Client {
+func NewClient(clientID, clientSecret string, httpClient HTTPClient) *Client {
 	return &Client{
-		hc: &http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: 100,
-				IdleConnTimeout:     90 * time.Second,
-			},
-		},
+		httpClient:   httpClient,
 		clientID:     clientID,
 		clientSecret: clientSecret,
 	}
@@ -45,7 +43,7 @@ func (c *Client) CreatePowensAccount(ctx echo.Context, userID uuid.UUID) (string
 	}
 
 	var respData PowensInitResponse
-	err := c.doRequest(ctx, http.MethodPost, PowensAPIBaseURL+EndpointAuthInit, reqBody, "", &respData)
+	err := c.makeRequest(ctx.Request().Context(), http.MethodPost, PowensAPIBaseURL+EndpointAuthInit, reqBody, "", &respData)
 	if err != nil {
 		return "", 0, errors.WithStack(err)
 	}
@@ -57,7 +55,7 @@ func (c *Client) CreateTemporaryToken(ctx echo.Context, authToken string) (strin
 	reqBody := map[string]interface{}{"duration": 3600}
 
 	var respData TokenResponse
-	err := c.doRequest(ctx, http.MethodPost, PowensAPIBaseURL+EndpointAuthToken, reqBody, authToken, &respData)
+	err := c.makeRequest(ctx.Request().Context(), http.MethodPost, PowensAPIBaseURL+EndpointAuthToken, reqBody, authToken, &respData)
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
@@ -65,13 +63,26 @@ func (c *Client) CreateTemporaryToken(ctx echo.Context, authToken string) (strin
 	return respData.Token, nil
 }
 
-func (c *Client) doRequest(ctx echo.Context, method, url string, requestBody interface{}, authToken string, responseData interface{}) error {
+func (c *Client) GetTransactions(ctx echo.Context, idUser int, accessToken string) (*TransactionsResponse, error) {
+	var transactions TransactionsResponse
+
+	url := PowensAPIBaseURL + "/users/" + strconv.Itoa(idUser) + "/transactions?limit=30"
+	err := c.makeRequest(ctx.Request().Context(), http.MethodGet, url, nil, accessToken, &transactions)
+
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return &transactions, nil
+}
+
+func (c *Client) makeRequest(ctx context.Context, method, url string, requestBody interface{}, authToken string, responseData interface{}) error {
 	jsonData, err := json.Marshal(requestBody)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx.Request().Context(), method, url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -81,7 +92,7 @@ func (c *Client) doRequest(ctx echo.Context, method, url string, requestBody int
 		req.Header.Set("Authorization", "Bearer "+authToken)
 	}
 
-	resp, err := c.hc.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return errors.WithStack(err)
 	}

@@ -68,3 +68,18 @@ type TokenResponse struct {
 	ExpiresIn int    `json:"expires_in"`
 	ExpireIn  int    `json:"expire_in"`
 }
+
+type Transactions struct {
+	Id                int     `json:"id"`
+	IdAccount         int     `json:"id_account"`
+	Date              string  `json:"date"`
+	OriginalWording   string  `json:"original_wording"`
+	SimplifiedWording string  `json:"simplified_wording"`
+	Type              string  `json:"type"`
+	Value             float64 `json:"value"`
+	FormattedValue    string  `json:"formatted_value"`
+}
+
+type TransactionsResponse struct {
+	Transactions []Transactions `json:"transactions"`
+}

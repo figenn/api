@@ -83,13 +83,14 @@ func (s *Server) SetupPowensApi() *powens.API {
 		CallbackURI: callbackURI,
 	}
 
-	client := powens.NewClient(clientID, clientSecret)
+	client := powens.NewClient(clientID, clientSecret, http.DefaultClient)
 
 	repo := powens.NewRepository(s.db)
 
-	service := powens.NewService(repo, client, config)
+	subscriptionsRepo := subscriptions.NewRepository(s.db)
+	service := powens.NewService(repo, client, config, subscriptionsRepo)
 
-	return powens.NewAPI(service)
+	return powens.NewAPI(s.config.JWTSecret, service)
 }
 
 func (s *Server) SetupSubscriptionAPI() *subscriptions.API {

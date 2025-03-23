@@ -1,43 +1,68 @@
 package powens
 
 import (
+	"figenn/internal/errors"
+	"figenn/internal/users"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
 )
 
 type API struct {
-	service *Service
+	JWTSecret string
+	s         *Service
 }
 
-func NewAPI(service *Service) *API {
-	return &API{service: service}
+func NewAPI(secret string, service *Service) *API {
+	return &API{
+		JWTSecret: secret,
+		s:         service,
+	}
 }
 
-func (h *API) Bind(rg *echo.Group) {
+func (a *API) Bind(rg *echo.Group) {
 	powensGroup := rg.Group("/powens")
-	powensGroup.POST("/create", h.createPowensAccount)
+	powensGroup.POST("/create", a.createPowensAccount)
+	powensGroup.GET("/transactions", a.ListTransactions, users.JWTMiddleware(a.JWTSecret))
 }
 
-func (h *API) createPowensAccount(ctx echo.Context) error {
+func (a *API) createPowensAccount(c echo.Context) error {
 	var req CreatePowensAccountRequest
-	if err := ctx.Bind(&req); err != nil {
-		return ctx.JSON(http.StatusBadRequest, echo.Map{
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{
 			"message": "Invalid request payload",
 			"details": err.Error(),
 		})
 	}
 
-	connectURL, err := h.service.CreateAccount(ctx, req.UserID)
+	connectURL, err := a.s.CreateAccount(c, req.UserID)
 	if err != nil {
-		return ctx.JSON(http.StatusInternalServerError, echo.Map{
+		return c.JSON(http.StatusInternalServerError, echo.Map{
 			"message": "Failed to create Powens account",
 			"details": err.Error(),
 		})
 	}
 
-	return ctx.JSON(http.StatusCreated, echo.Map{
+	return c.JSON(http.StatusCreated, echo.Map{
 		"url": connectURL,
+	})
+}
+
+func (a *API) ListTransactions(c echo.Context) error {
+	userID, ok := c.Get("user_id").(string)
+	if !ok {
+		return errors.NewUnauthorizedError("")
+	}
+	err := a.s.ListTransactions(c, userID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{
+			"message": "Failed to list transactions",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"message": "List transactions",
 	})
 }
 
