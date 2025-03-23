@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 )
 
@@ -32,18 +33,26 @@ func (r *Repository) SetPowensAccount(ctx context.Context, userID uuid.UUID, pow
 	return err
 }
 
-func (r *Repository) GetPowensAccount(ctx context.Context, userID string) (*string, error) {
-	query := `
-		SELECT access_token
-		FROM powens_accounts
-		WHERE user_id = $1
-	`
+func (r *Repository) GetPowensAccount(ctx context.Context, userID string) (*PowensAccount, error) {
+	query, args, err := squirrel.Select("access_token", "powens_id").
+		From("powens_accounts").
+		Where(squirrel.Eq{"user_id": userID}).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
 
 	var accessToken string
-	err := r.s.Pool().QueryRow(ctx, query, userID).Scan(&accessToken)
+	var powensID int
+	err = r.s.Pool().QueryRow(ctx, query, args...).Scan(&accessToken, &powensID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get powens account: %w", err)
 	}
 
-	return &accessToken, nil
+	return &PowensAccount{
+		AccessToken: accessToken,
+		PowensID:    powensID,
+	}, nil
 }

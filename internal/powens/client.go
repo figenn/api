@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -66,7 +67,15 @@ func (c *Client) CreateTemporaryToken(ctx echo.Context, authToken string) (strin
 func (c *Client) GetTransactions(ctx echo.Context, idUser int, accessToken string) (*TransactionsResponse, error) {
 	var transactions TransactionsResponse
 
-	url := PowensAPIBaseURL + "/users/" + strconv.Itoa(idUser) + "/transactions?limit=30"
+	now := time.Now()
+	maxDate := now.Format("2006-01-02")
+
+	oneMonthAgo := now.AddDate(0, -2, 0)
+	minDate := oneMonthAgo.Format("2006-01-02")
+
+	url := PowensAPIBaseURL + "/users/" + strconv.Itoa(idUser) +
+		"/transactions?limit=500&min_date=" + minDate + "&max_date=" + maxDate
+
 	err := c.makeRequest(ctx.Request().Context(), http.MethodGet, url, nil, accessToken, &transactions)
 
 	if err != nil {

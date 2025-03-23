@@ -22,6 +22,12 @@ func NewRepository(db database.DbService) *Repository {
 }
 
 func (r *Repository) CreateSubscription(ctx context.Context, sub *Subscription) error {
+	tx, err := r.s.Pool().Begin(ctx)
+	if err != nil {
+		return errors.New("failed to begin transaction")
+	}
+	defer tx.Rollback(ctx)
+
 	query, args, err := squirrel.Insert("subscriptions").
 		Columns("user_id", "name", "category", "color", "description", "start_date", "end_date", "price",
 			"logo_url", "billing_cycle", "is_active").
@@ -36,10 +42,15 @@ func (r *Repository) CreateSubscription(ctx context.Context, sub *Subscription) 
 		return errors.New("failed to build insert query")
 	}
 
-	err = r.s.Pool().QueryRow(ctx, query, args...).Scan(&sub.Id)
+	err = tx.QueryRow(ctx, query, args...).Scan(&sub.Id)
 	if err != nil {
 		fmt.Println(err)
 		return errors.New("failed to execute insert query")
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		fmt.Println(err)
+		return errors.New("failed to commit transaction")
 	}
 
 	return nil
@@ -312,4 +323,21 @@ func (r *Repository) GetUpcomingSubscriptions(ctx context.Context, userID string
 	}
 
 	return subscriptions, nil
+}
+
+func (r *Repository) SubscriptionExists(ctx context.Context, userID, name string, price float64, startDate time.Time) (bool, error) {
+	query, args, err := squirrel.Select("COUNT(*)").
+		From("subscriptions").
+		Where(squirrel.Eq{"user_id": userID, "name": name, "price": price, "start_date": startDate}).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
+
+	var count int
+	err = r.s.Pool().QueryRow(ctx, query, args...).Scan(&count)
+	if err != nil {
+		fmt.Println("Error checking subscription existence:", err)
+		return false, err
+	}
+
+	return count > 0, nil
 }
