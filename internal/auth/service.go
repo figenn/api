@@ -110,23 +110,41 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, ErrInvalidEmail
 	}
 
-	user, err := s.repo.GetUserByEmail(ctx, req.Email)
-	if err != nil {
-		return nil, ErrUserNotFound
+	var user *users.User
+
+	cachedUser, err := s.cache.Get(req.Email)
+	if err == nil {
+		if u, ok := cachedUser.(*users.User); ok {
+			user = u
+		}
+	}
+
+	if user == nil {
+		userFromDB, err := s.repo.GetUserByEmail(ctx, req.Email)
+		if err != nil {
+			return nil, ErrUserNotFound
+		}
+
+		_ = s.cache.SetWithExpire(req.Email, userFromDB, time.Minute*5)
+		user = userFromDB
 	}
 
 	if !utils.ComparePassword(user.Password, req.Password) {
 		return nil, ErrInvalidCredentials
 	}
 
+	return generateTokenResponse(user, s.config.JWTSecret, s.config.TokenDuration)
+}
+
+func generateTokenResponse(user *users.User, secret string, duration time.Duration) (*LoginResponse, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": user.ID,
 		"email":   user.Email,
-		"exp":     time.Now().Add(s.config.TokenDuration).Unix(),
+		"exp":     time.Now().Add(duration).Unix(),
 		"iat":     time.Now().Unix(),
 	})
 
-	tokenString, err := token.SignedString([]byte(s.config.JWTSecret))
+	tokenString, err := token.SignedString([]byte(secret))
 	if err != nil {
 		return nil, err
 	}
