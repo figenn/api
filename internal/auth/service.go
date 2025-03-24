@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"figenn/internal/mailer"
+	"figenn/internal/stripe"
 	"figenn/internal/users"
 	"figenn/internal/utils"
 	"log"
@@ -25,17 +26,19 @@ type Config struct {
 
 type Service struct {
 	repo   *Repository
+	s      *stripe.Service
 	config Config
 	cache  gcache.Cache
 	mailer mailer.Mailer
 }
 
-func NewService(repo *Repository, config *Config, mailerClient mailer.Mailer) *Service {
+func NewService(repo *Repository, config *Config, mailerClient mailer.Mailer, stripeService *stripe.Service) *Service {
 	return &Service{
 		repo:   repo,
 		config: *config,
 		cache:  gcache.New(100).LRU().Expiration(time.Minute * 5).Build(),
 		mailer: mailerClient,
+		s:      stripeService,
 	}
 }
 
@@ -66,6 +69,11 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		return nil, err
 	}
 
+	stripeID, err := s.s.CreateCustomer(req.Email, req.FirstName, req.LastName)
+	if err != nil {
+		return nil, err
+	}
+
 	newUser := &users.User{
 		Email:             req.Email,
 		FirstName:         req.FirstName,
@@ -74,6 +82,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		ProfilePictureUrl: "https://api.dicebear.com/7.x/initials/svg?seed=" + string(req.FirstName[0]) + string(req.LastName[0]),
 		Country:           req.Country,
 		Subscription:      users.Free,
+		StripeCustomerID:  *stripeID,
 	}
 
 	err = s.repo.CreateUser(ctx, newUser)

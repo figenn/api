@@ -1,33 +1,30 @@
 package stripe
 
 import (
+	"figenn/internal/users"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
-	"github.com/stripe/stripe-go/v81"
 )
 
-type StripeService interface {
-	CreateCheckoutSession(params *CheckoutSessionParams) (*stripe.CheckoutSession, error)
-	GetSubscription(subscriptionID string) (*stripe.Subscription, error)
-	CancelSubscription(subscriptionID string) (*stripe.Subscription, error)
-}
-
 type API struct {
-	service StripeService
+	JWTSecret string
+	s         *Service
 }
 
-func NewAPI(service StripeService) *API {
+func NewAPI(secret string, service *Service) *API {
 	return &API{
-		service: service,
+		JWTSecret: secret,
+		s:         service,
 	}
 }
 
 func (a *API) Bind(rg *echo.Group) {
 	stripeGroup := rg.Group("/stripe")
-	stripeGroup.POST("/create-checkout-session", a.HandleCreateCheckoutSession)
+	stripeGroup.POST("/create-checkout-session", a.HandleCreateCheckoutSession, users.JWTMiddleware(a.JWTSecret))
 	stripeGroup.GET("/subscriptions/:id", a.HandleGetSubscription)
 	stripeGroup.DELETE("/subscriptions/:id", a.HandleCancelSubscription)
+	stripeGroup.POST("/webhook", a.HandleWebhook)
 }
 
 func (a *API) HandleCreateCheckoutSession(c echo.Context) error {
@@ -38,9 +35,9 @@ func (a *API) HandleCreateCheckoutSession(c echo.Context) error {
 		})
 	}
 
-	session, err := a.service.CreateCheckoutSession(&params)
+	session, err := a.s.CreateCheckoutSession(&params)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError,echo.Map{
+		return c.JSON(http.StatusInternalServerError, echo.Map{
 			"error": "Failed to create checkout session",
 		})
 	}
@@ -58,7 +55,7 @@ func (a *API) HandleGetSubscription(c echo.Context) error {
 		})
 	}
 
-	subscription, err := a.service.GetSubscription(subscriptionID)
+	subscription, err := a.s.GetSubscription(subscriptionID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to get subscription",
@@ -76,7 +73,7 @@ func (a *API) HandleCancelSubscription(c echo.Context) error {
 		})
 	}
 
-	subscription, err := a.service.CancelSubscription(subscriptionID)
+	subscription, err := a.s.CancelSubscription(subscriptionID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to cancel subscription",
@@ -84,4 +81,8 @@ func (a *API) HandleCancelSubscription(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, subscription)
+}
+
+func (a *API) HandleWebhook(c echo.Context) error {
+	return a.s.HandleWebhook(c)
 }
