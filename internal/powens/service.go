@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"figenn/internal/subscriptions"
-	"fmt"
 	"math"
 	"net/url"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -65,94 +63,93 @@ func (s *Service) CreateAccount(ctx echo.Context, userID uuid.UUID) (*string, er
 	return &constructedURL, nil
 }
 
-type SubscriptionAuto struct {
-	Name     string
-	Date     string
-	Amount   string
-	Category string
-}
-
 func (s *Service) ListTransactions(ctx echo.Context, userId string) error {
-	fmt.Println(userId)
-
-	token, err := s.repo.GetPowensAccount(context.Background(), userId)
+	account, err := s.repo.GetPowensAccount(ctx.Request().Context(), userId)
 	if err != nil {
 		return err
 	}
 
-	response, err := s.client.GetTransactions(ctx, token.PowensID, token.AccessToken)
+	transactions, err := s.client.GetTransactions(ctx, account.PowensID, account.AccessToken)
 	if err != nil {
-		fmt.Println(err)
 		return err
 	}
 
-	// Organize transactions by wording and price
-	transactionsByWordingAndPrice := make(map[string]map[float64][]Transactions)
-	for _, t := range response.Transactions {
-		cleanedWording := cleanTransactionWording(t.SimplifiedWording)
-		if transactionsByWordingAndPrice[cleanedWording] == nil {
-			transactionsByWordingAndPrice[cleanedWording] = make(map[float64][]Transactions)
-		}
-		transactionsByWordingAndPrice[cleanedWording][t.Value] = append(transactionsByWordingAndPrice[cleanedWording][t.Value], t)
-	}
+	groupedTransactions := groupTransactions(transactions.Transactions)
+	subscriptions := s.detectSubscriptions(ctx.Request().Context(), userId, groupedTransactions)
 
-	subscriptionAutoList := []subscriptions.Subscription{}
-
-	for wording, priceMap := range transactionsByWordingAndPrice {
-		for price, transactions := range priceMap {
-			normalizedWording := strings.ToLower(wording)
-			normalizedWording = strings.ReplaceAll(normalizedWording, " ", "")
-
-			if len(transactions) >= 2 {
-				sort.Slice(transactions, func(i, j int) bool {
-					dateI, _ := time.Parse("2006-01-02", transactions[i].Date)
-					dateJ, _ := time.Parse("2006-01-02", transactions[j].Date)
-					return dateI.Before(dateJ)
-				})
-
-				date1, _ := time.Parse("2006-01-02", transactions[0].Date)
-				date2, _ := time.Parse("2006-01-02", transactions[1].Date)
-
-				if date2.Sub(date1).Hours() <= (31 * 24 * 3) {
-					for _, sub := range SubscriptionNames {
-						if sub.Regex.MatchString(wording) || levenshtein.ComputeDistance(normalizedWording[:min(10, len(normalizedWording))], strings.ToLower(sub.Name)) <= 3 {
-							billingCycle := determineBillingCycle(date1, date2)
-
-							exists, err := s.r.SubscriptionExists(ctx.Request().Context(), userId, sub.Name, math.Abs(price), date1)
-							if err != nil {
-								fmt.Println("Error checking subscription existence:", err)
-								continue // Passer à la transaction suivante en cas d'erreur
-							}
-
-							if !exists {
-								addSubscription(userId, transactions[0], sub, &subscriptionAutoList, billingCycle)
-							}
-							break
-						}
-					}
-				}
-			}
-		}
-	}
-
-	for _, subscription := range subscriptionAutoList {
-		err := s.r.CreateSubscription(context.Background(), &subscription)
+	for _, sub := range subscriptions {
+		logoURL, err := GetLogo(sub.Name)
 		if err != nil {
-			fmt.Println("Error while inserting subscription:", err)
-			continue
+			return err
+		}
+		sub.LogoUrl = &logoURL
+
+		if err := s.r.CreateSubscription(context.Background(), &sub); err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
-func addSubscription(userId string, t Transactions, sub SubscriptionList, subscriptionAutoList *[]subscriptions.Subscription, billingCycle subscriptions.BillingCycleType) {
-	parsedDate, err := time.Parse("2006-01-02", t.Date)
-	if err != nil {
-		return
+func groupTransactions(transactions []Transactions) map[string]map[float64][]Transactions {
+	grouped := make(map[string]map[float64][]Transactions)
+
+	for _, t := range transactions {
+		wording := cleanTransactionWording(t.SimplifiedWording)
+		if grouped[wording] == nil {
+			grouped[wording] = make(map[float64][]Transactions)
+		}
+		grouped[wording][t.Value] = append(grouped[wording][t.Value], t)
 	}
 
-	subscriptionAuto := subscriptions.Subscription{
+	return grouped
+}
+
+func (s *Service) detectSubscriptions(ctx context.Context, userId string, groupedTransactions map[string]map[float64][]Transactions) []subscriptions.Subscription {
+	var subscriptionsList []subscriptions.Subscription
+
+	for wording, priceMap := range groupedTransactions {
+		for price, transactions := range priceMap {
+			if len(transactions) < 2 {
+				continue
+			}
+
+			sort.Slice(transactions, func(i, j int) bool {
+				dateI, _ := time.Parse("2006-01-02", transactions[i].Date)
+				dateJ, _ := time.Parse("2006-01-02", transactions[j].Date)
+				return dateI.Before(dateJ)
+			})
+
+			date1, _ := time.Parse("2006-01-02", transactions[0].Date)
+			date2, _ := time.Parse("2006-01-02", transactions[1].Date)
+
+			if date2.Sub(date1).Hours() > (31 * 24 * 3) {
+				continue
+			}
+
+			for _, sub := range SubscriptionNames {
+				if matchesSubscription(wording, sub) {
+					if exists, _ := s.r.SubscriptionExists(ctx, userId, sub.Name, math.Abs(price), date1); !exists {
+						subscriptionsList = append(subscriptionsList, createSubscription(userId, transactions[0], sub, determineBillingCycle(date1, date2)))
+					}
+					break
+				}
+			}
+		}
+	}
+
+	return subscriptionsList
+}
+
+func matchesSubscription(wording string, sub SubscriptionList) bool {
+	normalizedWording := strings.ToLower(strings.ReplaceAll(wording, " ", ""))
+	return sub.Regex.MatchString(wording) || levenshtein.ComputeDistance(normalizedWording[:min(10, len(normalizedWording))], strings.ToLower(sub.Name)) <= 3
+}
+
+func createSubscription(userId string, t Transactions, sub SubscriptionList, billingCycle subscriptions.BillingCycleType) subscriptions.Subscription {
+	parsedDate, _ := time.Parse("2006-01-02", t.Date)
+	return subscriptions.Subscription{
 		UserId:       userId,
 		Name:         sub.Name,
 		Price:        math.Abs(t.Value),
@@ -163,29 +160,27 @@ func addSubscription(userId string, t Transactions, sub SubscriptionList, subscr
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
-
-	*subscriptionAutoList = append(*subscriptionAutoList, subscriptionAuto)
-}
-
-func cleanTransactionWording(wording string) string {
-	wording = regexp.MustCompile(`(?i)(PAYPAL|CARD|CB|\d{4,})`).ReplaceAllString(wording, "")
-	wording = regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(wording, "")
-	return strings.TrimSpace(wording)
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func determineBillingCycle(date1, date2 time.Time) subscriptions.BillingCycleType {
 	diff := date2.Sub(date1).Hours()
+
 	if diff <= (31 * 24) {
 		return subscriptions.Monthly
 	} else if diff <= (365 * 24) {
 		return subscriptions.Annual
 	}
 	return subscriptions.Quarterly
+}
+
+func cleanTransactionWording(wording string) string {
+	normalized := strings.ToLower(strings.TrimSpace(wording))
+
+	normalized = strings.ReplaceAll(normalized, "-", " ")
+	normalized = strings.ReplaceAll(normalized, "_", " ")
+
+	normalized = strings.ReplaceAll(normalized, ".", "")
+	normalized = strings.Join(strings.Fields(normalized), " ")
+
+	return normalized
 }

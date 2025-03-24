@@ -117,3 +117,21 @@ func (c *Client) makeRequest(ctx context.Context, method, url string, requestBod
 
 	return nil
 }
+
+func GetLogo(serviceName string) (string, error) {
+	url := "https://img.logo.dev/" + serviceName + ".com?token=pk_IMxh-hDEQhKE2KnTooq5mg"
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return url, nil
+	}
+
+	seed := string(serviceName[0])
+	customLogoURL := "https://api.dicebear.com/7.x/initials/svg?seed=" + seed
+
+	return customLogoURL, nil
+}

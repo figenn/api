@@ -83,3 +83,10 @@ type Transactions struct {
 type TransactionsResponse struct {
 	Transactions []Transactions `json:"transactions"`
 }
+
+type SubscriptionAuto struct {
+	Name     string
+	Date     string
+	Amount   string
+	Category string
+}
