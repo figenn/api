@@ -1,7 +1,6 @@
 package users
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -27,8 +26,6 @@ func (a *API) Bind(rg *echo.Group) {
 func (a *API) Me(c echo.Context) error {
 	ctx := c.Request().Context()
 	userId := c.Get("user_id").(string)
-
-	fmt.Println(userId)
 
 	u, err := a.s.GetUserInfos(ctx, userId)
 	if err != nil {

@@ -44,4 +44,6 @@ type UserRequest struct {
 	Country           string    `json:"country,omitempty" form:"country"`
 	ProfilePictureUrl string    `json:"profile_picture_url,omitempty" form:"profile_picture_url"`
 	CreatedAt         time.Time `json:"created_at" form:"created_at"`
+	StripeCustomerID  string    `json:"stripe_customer_id,omitempty" form:"stripe_customer_id"`
+	Subscription      string    `json:"subscription,omitempty" form:"subscription"`
 }

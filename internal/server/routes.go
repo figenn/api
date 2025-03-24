@@ -51,11 +51,12 @@ func (s *Server) setupSubscriptionRoutes(apiGroup *echo.Group) {
 
 func (s *Server) newAuthAPI() *auth.API {
 	authRepo := auth.NewRepository(s.db)
+	stripeService := stripe.NewService(os.Getenv("STRIPE_SECRET_KEY"), users.NewRepository(s.db))
 	authService := auth.NewService(authRepo, &auth.Config{
 		JWTSecret:     s.config.JWTSecret,
 		TokenDuration: time.Hour * 24 * 7, // 5 jours
 		AppURL:        os.Getenv("APP_URL"),
-	}, mailer.NewMailer())
+	}, mailer.NewMailer(), stripeService)
 
 	return auth.NewAPI(authService)
 }
@@ -67,8 +68,9 @@ func (s *Server) newUserAPI() *users.API {
 }
 
 func (s *Server) newStripeAPI() *stripe.API {
-	stripeService := stripe.NewStripeClient(os.Getenv("STRIPE_SECRET_KEY"))
-	return stripe.NewAPI(stripeService)
+	userRepo := users.NewRepository(s.db)
+	stripeService := stripe.NewService(os.Getenv("STRIPE_SECRET_KEY"), userRepo)
+	return stripe.NewAPI(s.config.JWTSecret, stripeService)
 }
 
 func (s *Server) SetupPowensApi() *powens.API {

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"figenn/internal/mailer"
+	"figenn/internal/stripe"
 	"figenn/internal/users"
 	"figenn/internal/utils"
 	"log"
@@ -25,17 +26,19 @@ type Config struct {
 
 type Service struct {
 	repo   *Repository
+	s      *stripe.Service
 	config Config
 	cache  gcache.Cache
 	mailer mailer.Mailer
 }
 
-func NewService(repo *Repository, config *Config, mailerClient mailer.Mailer) *Service {
+func NewService(repo *Repository, config *Config, mailerClient mailer.Mailer, stripeService *stripe.Service) *Service {
 	return &Service{
 		repo:   repo,
 		config: *config,
 		cache:  gcache.New(100).LRU().Expiration(time.Minute * 5).Build(),
 		mailer: mailerClient,
+		s:      stripeService,
 	}
 }
 
@@ -66,6 +69,11 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		return nil, err
 	}
 
+	stripeID, err := s.s.CreateCustomer(req.Email, req.FirstName, req.LastName)
+	if err != nil {
+		return nil, err
+	}
+
 	newUser := &users.User{
 		Email:             req.Email,
 		FirstName:         req.FirstName,
@@ -74,6 +82,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		ProfilePictureUrl: "https://api.dicebear.com/7.x/initials/svg?seed=" + string(req.FirstName[0]) + string(req.LastName[0]),
 		Country:           req.Country,
 		Subscription:      users.Free,
+		StripeCustomerID:  *stripeID,
 	}
 
 	err = s.repo.CreateUser(ctx, newUser)
@@ -101,23 +110,41 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, ErrInvalidEmail
 	}
 
-	user, err := s.repo.GetUserByEmail(ctx, req.Email)
-	if err != nil {
-		return nil, ErrUserNotFound
+	var user *users.User
+
+	cachedUser, err := s.cache.Get(req.Email)
+	if err == nil {
+		if u, ok := cachedUser.(*users.User); ok {
+			user = u
+		}
+	}
+
+	if user == nil {
+		userFromDB, err := s.repo.GetUserByEmail(ctx, req.Email)
+		if err != nil {
+			return nil, ErrUserNotFound
+		}
+
+		_ = s.cache.SetWithExpire(req.Email, userFromDB, time.Minute*5)
+		user = userFromDB
 	}
 
 	if !utils.ComparePassword(user.Password, req.Password) {
 		return nil, ErrInvalidCredentials
 	}
 
+	return generateTokenResponse(user, s.config.JWTSecret, s.config.TokenDuration)
+}
+
+func generateTokenResponse(user *users.User, secret string, duration time.Duration) (*LoginResponse, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": user.ID,
 		"email":   user.Email,
-		"exp":     time.Now().Add(s.config.TokenDuration).Unix(),
+		"exp":     time.Now().Add(duration).Unix(),
 		"iat":     time.Now().Unix(),
 	})
 
-	tokenString, err := token.SignedString([]byte(s.config.JWTSecret))
+	tokenString, err := token.SignedString([]byte(secret))
 	if err != nil {
 		return nil, err
 	}
