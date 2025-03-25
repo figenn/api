@@ -3,8 +3,10 @@ package powens
 import (
 	"context"
 	"figenn/internal/database"
+	"fmt"
 	"time"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 )
 
@@ -29,4 +31,28 @@ func (r *Repository) SetPowensAccount(ctx context.Context, userID uuid.UUID, pow
     `
 	_, err := r.s.Pool().Exec(ctx, query, userID.String(), powensID, accessToken, time.Now())
 	return err
+}
+
+func (r *Repository) GetPowensAccount(ctx context.Context, userID string) (*PowensAccount, error) {
+	query, args, err := squirrel.Select("access_token", "powens_id").
+		From("powens_accounts").
+		Where(squirrel.Eq{"user_id": userID}).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	var accessToken string
+	var powensID int
+	err = r.s.Pool().QueryRow(ctx, query, args...).Scan(&accessToken, &powensID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get powens account: %w", err)
+	}
+
+	return &PowensAccount{
+		AccessToken: accessToken,
+		PowensID:    powensID,
+	}, nil
 }
