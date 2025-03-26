@@ -76,7 +76,7 @@ func (a *API) Login(c echo.Context) error {
 		})
 	}
 
-	resp, err := a.service.Login(c.Request().Context(), req)
+	resp, err := a.service.Login(c.Request().Context(), req, c.Response().Writer)
 	if err != nil {
 		return c.JSON(http.StatusUnauthorized, ErrorResponse{
 			Error: err.Error(),

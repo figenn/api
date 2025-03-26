@@ -58,7 +58,6 @@ func (r *Repository) GetUser(ctx context.Context, id string) (*UserRequest, erro
 func (r *Repository) GetUserByStripeID(ctx context.Context, stripeID string) (*User, error) {
 	var u User
 
-	// Construire la requête avec Squirrel
 	builder, args, err := squirrel.Select("id").
 		From("users").
 		Where(squirrel.Eq{"stripe_customer_id": stripeID}).
@@ -69,7 +68,6 @@ func (r *Repository) GetUserByStripeID(ctx context.Context, stripeID string) (*U
 		return nil, err
 	}
 
-	// Exécuter la requête
 	err = r.s.Pool().QueryRow(ctx, builder, args...).Scan(&u.ID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -83,7 +81,6 @@ func (r *Repository) GetUserByStripeID(ctx context.Context, stripeID string) (*U
 }
 
 func (r *Repository) UpdateUserSubscription(ctx context.Context, id string, subscriptionType SubscriptionType) error {
-	// Construire la requête avec Squirrel
 	builder, args, err := squirrel.Update("users").
 		Set("subscription", subscriptionType).
 		Where(squirrel.Eq{"id": id}).
@@ -94,7 +91,6 @@ func (r *Repository) UpdateUserSubscription(ctx context.Context, id string, subs
 		return err
 	}
 
-	// Exécuter la requête
 	_, err = r.s.Pool().Exec(ctx, builder, args...)
 	if err != nil {
 		return err

@@ -56,10 +56,11 @@ func New() DbService {
 	}
 
 	// Paramétrage du pool
-	config.MaxConns = 25                      // Connexions max simultanées
-	config.MinConns = 5                       // Connexions min maintenues
-	config.MaxConnLifetime = 1 * time.Hour    // Durée de vie max d'une connexion
-	config.MaxConnIdleTime = 30 * time.Minute // Temps max d'inactivité
+	config.MaxConns = 75                       // Connexions max simultanées
+	config.MinConns = 10                       // Connexions min maintenues
+	config.MaxConnLifetime = 1 * time.Hour     // Durée de vie max d'une connexion
+	config.MaxConnIdleTime = 30 * time.Minute  // Temps max d'inactivité
+	config.HealthCheckPeriod = 1 * time.Minute // Vérification de la santé de la connexion
 
 	// Création du pool avec la configuration personnalisée
 	pool, err := pgxpool.NewWithConfig(context.Background(), config)

@@ -9,7 +9,9 @@ import (
 	"figenn/internal/stripe"
 	"figenn/internal/users"
 	"figenn/internal/utils"
+	"fmt"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/bluele/gcache"
@@ -19,9 +21,11 @@ import (
 )
 
 type Config struct {
-	JWTSecret     string
-	TokenDuration time.Duration
-	AppURL        string
+	JWTSecret            string
+	TokenDuration        time.Duration
+	RefreshTokenDuration time.Duration
+	AppURL               string
+	Environment          string
 }
 
 type Service struct {
@@ -87,6 +91,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 
 	err = s.repo.CreateUser(ctx, newUser)
 	if err != nil {
+		fmt.Println("Error creating user", err)
 		return nil, err
 	}
 
@@ -101,7 +106,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 	}, nil
 }
 
-func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, error) {
+func (s *Service) Login(ctx context.Context, req LoginRequest, w http.ResponseWriter) (*LoginResponse, error) {
 	if req.Email == "" || req.Password == "" {
 		return nil, ErrMissingFields
 	}
@@ -122,7 +127,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 	if user == nil {
 		userFromDB, err := s.repo.GetUserByEmail(ctx, req.Email)
 		if err != nil {
-			return nil, ErrUserNotFound
+			return nil, err
 		}
 
 		_ = s.cache.SetWithExpire(req.Email, userFromDB, time.Minute*5)
@@ -133,10 +138,46 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, ErrInvalidCredentials
 	}
 
-	return generateTokenResponse(user, s.config.JWTSecret, s.config.TokenDuration)
+	accessToken, err := generateToken(user, s.config.JWTSecret, s.config.TokenDuration)
+	if err != nil {
+		return nil, err
+	}
+
+	refreshToken, err := generateRefreshToken(user, s.config.JWTSecret, s.config.RefreshTokenDuration)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.repo.SaveRefreshToken(ctx, user.ID, refreshToken); err != nil {
+		return nil, ErrInternalServer
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "accessToken",
+		Value:    accessToken,
+		HttpOnly: true,
+		Secure:   s.config.Environment == "production",
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+		Expires:  time.Now().Add(s.config.TokenDuration),
+	})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refreshToken",
+		Value:    refreshToken,
+		HttpOnly: true,
+		Secure:   s.config.Environment == "production",
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/api/auth",
+		Expires:  time.Now().Add(s.config.RefreshTokenDuration),
+	})
+
+	return &LoginResponse{
+		Token: accessToken,
+	}, nil
 }
 
-func generateTokenResponse(user *users.User, secret string, duration time.Duration) (*LoginResponse, error) {
+func generateToken(user *users.User, secret string, duration time.Duration) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": user.ID,
 		"email":   user.Email,
@@ -146,12 +187,136 @@ func generateTokenResponse(user *users.User, secret string, duration time.Durati
 
 	tokenString, err := token.SignedString([]byte(secret))
 	if err != nil {
+		return "", err
+	}
+
+	return tokenString, nil
+}
+
+func generateRefreshToken(user *users.User, secret string, duration time.Duration) (string, error) {
+	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id": user.ID,
+		"exp":     time.Now().Add(duration).Unix(),
+		"type":    "refresh", // Indicate it's a refresh token
+		"iat":     time.Now().Unix(),
+	})
+
+	refreshTokenString, err := refreshToken.SignedString([]byte(secret))
+	if err != nil {
+		return "", err
+	}
+
+	return refreshTokenString, nil
+}
+
+func (s *Service) RefreshToken(ctx context.Context, r *http.Request, w http.ResponseWriter) (*LoginResponse, error) {
+	refreshTokenCookie, err := r.Cookie("refreshToken")
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	refreshToken := refreshTokenCookie.Value
+
+	token, err := jwt.Parse(refreshToken, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("invalid signing method")
+		}
+		return []byte(s.config.JWTSecret), nil
+	})
+
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid {
+		return nil, ErrInvalidToken
+	}
+
+	userIDStr, ok := claims["user_id"].(string)
+	if !ok {
+		return nil, ErrInvalidToken
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	tokenType, ok := claims["type"].(string)
+	if !ok || tokenType != "refresh" {
+		return nil, ErrInvalidToken
+	}
+
+	validRefreshToken, err := s.repo.VerifyRefreshToken(ctx, userID, refreshToken)
+	if err != nil || !validRefreshToken {
+		return nil, ErrInvalidToken
+	}
+
+	user, err := s.repo.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, ErrUserNotFound
+	}
+
+	newAccessToken, err := generateToken(user, s.config.JWTSecret, s.config.TokenDuration)
+	if err != nil {
 		return nil, err
 	}
 
+	newRefreshToken, err := generateRefreshToken(user, s.config.JWTSecret, s.config.RefreshTokenDuration)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.repo.SaveRefreshToken(ctx, user.ID, newRefreshToken)
+	if err != nil {
+		return nil, ErrInternalServer
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "accessToken",
+		Value:    newAccessToken,
+		HttpOnly: true,
+		Secure:   s.config.Environment == "production",
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+		Expires:  time.Now().Add(s.config.TokenDuration),
+	})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refreshToken",
+		Value:    newRefreshToken,
+		HttpOnly: true,
+		Secure:   s.config.Environment == "production",
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/api/auth", // Keep the same path
+		Expires:  time.Now().Add(s.config.RefreshTokenDuration),
+	})
+
 	return &LoginResponse{
-		Token: tokenString,
+		Token: newAccessToken,
 	}, nil
+}
+
+func (s *Service) Logout(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "accessToken",
+		Value:    "",
+		HttpOnly: true,
+		Secure:   s.config.Environment == "production",
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+		Expires:  time.Now().Add(-time.Hour),
+	})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refreshToken",
+		Value:    "",
+		HttpOnly: true,
+		Secure:   s.config.Environment == "production",
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/api/auth",
+		Expires:  time.Now().Add(-time.Hour),
+	})
 }
 
 func (s *Service) ForgotPassword(ctx context.Context, req ForgotPasswordRequest) error {
@@ -178,7 +343,7 @@ func (s *Service) ForgotPassword(ctx context.Context, req ForgotPasswordRequest)
 	}
 	err = s.cache.SetWithExpire(tokenGenerated, idUser, time.Minute*5)
 	if err != nil {
-		log.Println("Failed to cache reset token", err)
+		return ErrInternalServer
 	}
 
 	resetUrl := s.config.AppURL + "/auth/reset-password?token=" + token
