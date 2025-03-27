@@ -266,7 +266,7 @@ func (s *Service) RefreshToken(ctx context.Context, r *http.Request, w http.Resp
 		HttpOnly: true,
 		Secure:   s.config.Environment == "production",
 		SameSite: http.SameSiteStrictMode,
-		Path:     "/api/auth", // Keep the same path
+		Path:     "/api",
 		Expires:  time.Now().Add(s.config.RefreshTokenDuration),
 	})
 
