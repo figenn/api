@@ -21,7 +21,7 @@ func NewAPI(secret string, service *Service) *API {
 
 func (a *API) Bind(rg *echo.Group) {
 	stripeGroup := rg.Group("/stripe")
-	stripeGroup.POST("/create-checkout-session", a.HandleCreateCheckoutSession, users.JWTMiddleware(a.JWTSecret))
+	stripeGroup.POST("/create-checkout-session", a.HandleCreateCheckoutSession, users.CookieAuthMiddleware(a.JWTSecret))
 	stripeGroup.GET("/subscriptions/:id", a.HandleGetSubscription)
 	stripeGroup.DELETE("/subscriptions/:id", a.HandleCancelSubscription)
 	stripeGroup.POST("/webhook", a.HandleWebhook)

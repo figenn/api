@@ -19,7 +19,7 @@ func NewAPI(secret string, service *Service) *API {
 }
 
 func (a *API) Bind(rg *echo.Group) {
-	userGroup := rg.Group("/user", JWTMiddleware(a.JWTSecret))
+	userGroup := rg.Group("/user", CookieAuthMiddleware(a.JWTSecret))
 	userGroup.GET("/me", a.Me)
 }
 

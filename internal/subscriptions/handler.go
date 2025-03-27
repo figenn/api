@@ -33,7 +33,7 @@ func NewAPI(secret string, service *Service) *API {
 }
 
 func (a *API) Bind(rg *echo.Group) {
-	subGroup := rg.Group("/subscriptions", users.JWTMiddleware(a.JWTSecret))
+	subGroup := rg.Group("/subscriptions", users.CookieAuthMiddleware(a.JWTSecret))
 	subGroup.GET("", a.GetAllSubscriptions)
 	subGroup.POST("/create", a.CreateSubscription)
 	subGroup.GET("/active", a.ListActiveSubscriptions)

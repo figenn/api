@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 )
@@ -76,14 +77,36 @@ func (a *API) Login(c echo.Context) error {
 		})
 	}
 
-	resp, err := a.service.Login(c.Request().Context(), req, c.Response().Writer)
+	accessToken, refreshToken, err := a.service.Login(c.Request().Context(), req, c.Response().Writer)
 	if err != nil {
 		return c.JSON(http.StatusUnauthorized, ErrorResponse{
 			Error: err.Error(),
 		})
 	}
 
-	return c.JSON(http.StatusOK, resp)
+	c.SetCookie(&http.Cookie{
+		Name:     "accessToken",
+		Value:    *accessToken,
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		Expires:  time.Now().Add(a.service.config.TokenDuration),
+	})
+
+	c.SetCookie(&http.Cookie{
+		Name:     "refreshToken",
+		Value:    *refreshToken,
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/api",
+		Expires:  time.Now().Add(a.service.config.RefreshTokenDuration),
+	})
+
+	return c.JSON(http.StatusOK, echo.Map{
+		"message": "Login successful",
+	})
 }
 
 func (a *API) ForgotPassword(c echo.Context) error {

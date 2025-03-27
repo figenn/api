@@ -106,13 +106,13 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 	}, nil
 }
 
-func (s *Service) Login(ctx context.Context, req LoginRequest, w http.ResponseWriter) (*LoginResponse, error) {
+func (s *Service) Login(ctx context.Context, req LoginRequest, w http.ResponseWriter) (*string, *string, error) {
 	if req.Email == "" || req.Password == "" {
-		return nil, ErrMissingFields
+		return nil, nil, ErrMissingFields
 	}
 
 	if !utils.IsValidEmail(req.Email) {
-		return nil, ErrInvalidEmail
+		return nil, nil, ErrInvalidEmail
 	}
 
 	var user *users.User
@@ -127,7 +127,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest, w http.ResponseWr
 	if user == nil {
 		userFromDB, err := s.repo.GetUserByEmail(ctx, req.Email)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		_ = s.cache.SetWithExpire(req.Email, userFromDB, time.Minute*5)
@@ -135,46 +135,24 @@ func (s *Service) Login(ctx context.Context, req LoginRequest, w http.ResponseWr
 	}
 
 	if !utils.ComparePassword(user.Password, req.Password) {
-		return nil, ErrInvalidCredentials
+		return nil, nil, ErrInvalidCredentials
 	}
 
 	accessToken, err := generateToken(user, s.config.JWTSecret, s.config.TokenDuration)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	refreshToken, err := generateRefreshToken(user, s.config.JWTSecret, s.config.RefreshTokenDuration)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := s.repo.SaveRefreshToken(ctx, user.ID, refreshToken); err != nil {
-		return nil, ErrInternalServer
+		return nil, nil, ErrInternalServer
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "accessToken",
-		Value:    accessToken,
-		HttpOnly: true,
-		Secure:   s.config.Environment == "production",
-		SameSite: http.SameSiteStrictMode,
-		Path:     "/",
-		Expires:  time.Now().Add(s.config.TokenDuration),
-	})
-
-	http.SetCookie(w, &http.Cookie{
-		Name:     "refreshToken",
-		Value:    refreshToken,
-		HttpOnly: true,
-		Secure:   s.config.Environment == "production",
-		SameSite: http.SameSiteStrictMode,
-		Path:     "/api/auth",
-		Expires:  time.Now().Add(s.config.RefreshTokenDuration),
-	})
-
-	return &LoginResponse{
-		Token: accessToken,
-	}, nil
+	return &accessToken, &refreshToken, nil
 }
 
 func generateToken(user *users.User, secret string, duration time.Duration) (string, error) {
