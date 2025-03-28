@@ -17,7 +17,6 @@ import (
 	"github.com/bluele/gcache"
 	"github.com/golang-jwt/jwt"
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type Config struct {
@@ -330,25 +329,12 @@ func (s *Service) ForgotPassword(ctx context.Context, req ForgotPasswordRequest)
 	return nil
 }
 
-func (s *Service) ValidateResetToken(ctx context.Context, token string) error {
+func (s *Service) IsValidResetToken(ctx context.Context, token string) (bool, error) {
 	if token == "" {
-		return ErrMissingFields
+		return false, nil
 	}
 
-	tokenValue, err := s.cache.Get(token)
-	if err == nil {
-		_, ok := tokenValue.(int)
-		if ok {
-			return nil
-		}
-	}
-
-	err = s.repo.ValidateResetToken(ctx, token)
-	if err != nil {
-		return ErrInvalidToken
-	}
-
-	return nil
+	return s.repo.IsValidResetToken(ctx, token)
 }
 
 func (s *Service) ResetPassword(ctx context.Context, req ResetPasswordRequest) error {
@@ -361,23 +347,17 @@ func (s *Service) ResetPassword(ctx context.Context, req ResetPasswordRequest) e
 	}
 
 	var userID uuid.UUID
-	tokenValue, err := s.cache.Get(req.Token)
-	if err == nil {
-		id, ok := tokenValue.(uuid.UUID)
-		if ok {
-			userID = id
-		}
+	id, email, valid, dbErr := s.repo.GetUserIDByResetToken(ctx, req.Token)
+	if dbErr != nil || !valid {
+		return ErrInvalidToken
 	}
 
-	if userID == uuid.Nil {
-		id, valid, dbErr := s.repo.GetUserIDByResetToken(ctx, req.Token)
-		if dbErr != nil || !valid {
-			return ErrInvalidToken
-		}
-		userID = uuid.UUID(id)
+	if removed := s.cache.Remove(*email); !removed {
+		log.Println("Failed to remove email from cache")
 	}
+	userID = uuid.UUID(id)
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
+	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
 		return err
 	}

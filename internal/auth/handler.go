@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -25,6 +26,7 @@ func (a *API) Bind(rg *echo.Group) {
 	authGroup.POST("/forgot-password", a.ForgotPassword)
 	authGroup.GET("/validate-reset-token", a.ValidateResetToken)
 	authGroup.POST("/reset-password", a.ResetPassword)
+	authGroup.GET("/logout", a.Logout)
 }
 
 func (a *API) Register(c echo.Context) error {
@@ -146,29 +148,24 @@ func (a *API) ForgotPassword(c echo.Context) error {
 
 func (a *API) ValidateResetToken(c echo.Context) error {
 	token := c.QueryParam("token")
+	fmt.Println(token, "token")
 	if token == "" {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Token is missing",
+		fmt.Println("token is empty")
+		return c.JSON(http.StatusOK, echo.Map{
+			"valid": false,
 		})
 	}
 
-	err := a.service.ValidateResetToken(c.Request().Context(), token)
+	valid, err := a.service.IsValidResetToken(c.Request().Context(), token)
 	if err != nil {
-		switch {
-		case errors.Is(err, ErrTokenExpired) || errors.Is(err, ErrInvalidToken):
-			return c.JSON(http.StatusUnauthorized, ErrorResponse{
-				Error: err.Error(),
-			})
-
-		default:
-			return c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Error: ErrInternalServer.Error(),
-			})
-		}
+		fmt.Println("error", err)
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error: ErrInternalServer.Error(),
+		})
 	}
 
 	return c.JSON(http.StatusOK, echo.Map{
-		"message": "Token is valid",
+		"valid": valid,
 	})
 }
 
@@ -205,4 +202,9 @@ func (a *API) ResetPassword(c echo.Context) error {
 	return c.JSON(http.StatusOK, echo.Map{
 		"message": "Password has been reset",
 	})
+}
+
+func (a *API) Logout(c echo.Context) error {
+	a.service.Logout(c.Response())
+	return c.NoContent(http.StatusOK)
 }

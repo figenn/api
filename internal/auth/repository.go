@@ -9,6 +9,8 @@ import (
 
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
+
+	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -107,26 +109,33 @@ func (r *Repository) SavePasswordResetToken(ctx context.Context, id uuid.UUID, t
 	return returnedID, returnedToken, err
 }
 
-func (r *Repository) ValidateResetToken(ctx context.Context, token string) error {
-	q := squirrel.Select("id").From("users").
+func (r *Repository) IsValidResetToken(ctx context.Context, token string) (bool, error) {
+	q := squirrel.
+		Select("1").
+		From("users").
 		Where(squirrel.Eq{"reset_password_token": token}).
+		Limit(1).
 		PlaceholderFormat(squirrel.Dollar)
 
 	query, args, err := q.ToSql()
 	if err != nil {
-		return errors.New("failed to build select query")
+		return false, err
 	}
 
-	var id int
-	err = r.pool.QueryRow(ctx, query, args...).Scan(&id)
-	if errors.Is(err, errors.New("pgx: no rows in result")) {
-		return ErrInvalidToken
+	var exists int
+	err = r.pool.QueryRow(ctx, query, args...).Scan(&exists)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return false, nil
+		}
+		return false, err
 	}
-	return nil
+
+	return true, nil
 }
 
-func (r *Repository) GetUserIDByResetToken(ctx context.Context, token string) (uuid.UUID, bool, error) {
-	q := squirrel.Select("id", "date_reset_password").
+func (r *Repository) GetUserIDByResetToken(ctx context.Context, token string) (uuid.UUID, *string, bool, error) {
+	q := squirrel.Select("id", "email", "date_reset_password").
 		From("users").
 		Where(squirrel.Eq{"reset_password_token": token}).
 		Where(squirrel.Eq{"is_resetting_password": true}).
@@ -134,24 +143,25 @@ func (r *Repository) GetUserIDByResetToken(ctx context.Context, token string) (u
 
 	query, args, err := q.ToSql()
 	if err != nil {
-		return uuid.Nil, false, errors.New("failed to build select query")
+		return uuid.Nil, nil, false, errors.New("failed to build select query")
 	}
 
 	var userID uuid.UUID
+	var email *string
 	var dateResetPassword time.Time
-	err = r.pool.QueryRow(ctx, query, args...).Scan(&userID, &dateResetPassword)
+	err = r.pool.QueryRow(ctx, query, args...).Scan(&userID, &email, &dateResetPassword)
 	if err != nil {
 		if errors.Is(err, errors.New("pgx: no rows in result")) {
-			return uuid.Nil, false, nil
+			return uuid.Nil, nil, false, nil
 		}
-		return uuid.Nil, false, err
+		return uuid.Nil, nil, false, err
 	}
 
 	if time.Since(dateResetPassword) > 24*time.Hour {
-		return uuid.Nil, false, nil
+		return uuid.Nil, nil, false, nil
 	}
 
-	return userID, true, nil
+	return userID, email, true, nil
 }
 
 func (r *Repository) ClearResetToken(ctx context.Context, userID uuid.UUID) error {
