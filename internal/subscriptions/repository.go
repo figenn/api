@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"figenn/internal/database"
-	"fmt"
 	"time"
 
 	"github.com/Masterminds/squirrel"
@@ -224,40 +223,33 @@ func (r *Repository) GetSubscriptionByID(ctx context.Context, userID, subID stri
 }
 
 func (r *Repository) CalculateActiveSubscriptionPrice(ctx context.Context, userID string, year, month *int) (float64, error) {
-	query := squirrel.Select("SUM(price)").From("subscriptions").Where(squirrel.Eq{"user_id": userID, "is_active": true})
+	query := squirrel.
+		Select("COALESCE(SUM(price), 0)").
+		From("subscriptions").
+		Where(squirrel.Eq{"user_id": userID, "is_active": true})
 
 	if year != nil {
-		query = query.Where(squirrel.Or{
-			squirrel.And{
-				squirrel.LtOrEq{"EXTRACT(YEAR FROM start_date)": *year},
-				squirrel.Or{
-					squirrel.Eq{"end_date": nil},
-					squirrel.GtOrEq{"EXTRACT(YEAR FROM end_date)": *year},
-				},
-			},
-			squirrel.And{
-				squirrel.LtOrEq{"EXTRACT(YEAR FROM start_date)": *year},
-				squirrel.Eq{"EXTRACT(YEAR FROM start_date)": *year},
-				squirrel.Eq{"end_date": nil},
-			},
-		})
+		query = query.Where(
+			squirrel.Expr(`
+				EXTRACT(YEAR FROM start_date) <= ? AND 
+				(
+					end_date IS NULL OR 
+					EXTRACT(YEAR FROM end_date) >= ?
+				)
+			`, *year, *year),
+		)
 	}
 
 	if month != nil {
-		query = query.Where(squirrel.Or{
-			squirrel.And{
-				squirrel.LtOrEq{"EXTRACT(MONTH FROM start_date)": *month},
-				squirrel.Or{
-					squirrel.Eq{"end_date": nil},
-					squirrel.GtOrEq{"EXTRACT(MONTH FROM end_date)": *month},
-				},
-			},
-			squirrel.And{
-				squirrel.LtOrEq{"EXTRACT(MONTH FROM start_date)": *month},
-				squirrel.Eq{"EXTRACT(MONTH FROM start_date)": *month},
-				squirrel.Eq{"end_date": nil},
-			},
-		})
+		query = query.Where(
+			squirrel.Expr(`
+				EXTRACT(MONTH FROM start_date) <= ? AND 
+				(
+					end_date IS NULL OR 
+					EXTRACT(MONTH FROM end_date) >= ?
+				)
+			`, *month, *month),
+		)
 	}
 
 	query = query.PlaceholderFormat(squirrel.Dollar)
@@ -277,34 +269,36 @@ func (r *Repository) CalculateActiveSubscriptionPrice(ctx context.Context, userI
 }
 
 func (r *Repository) GetUpcomingSubscriptions(ctx context.Context, userID string, week int) ([]*Subscription, error) {
-	query, args, err := squirrel.Select("id", "user_id", "name", "start_date", "color", "logo_url, price").
+	query := squirrel.
+		Select("id", "user_id", "name", "start_date", "color", "logo_url", "price").
 		From("subscriptions").
 		Where(squirrel.And{
 			squirrel.Eq{"user_id": userID},
+			squirrel.Eq{"is_active": true},
 			squirrel.Expr("EXTRACT(WEEK FROM start_date) = ?", week),
 			squirrel.Expr("EXTRACT(YEAR FROM start_date) = ?", time.Now().Year()),
 		}).
-		Where(squirrel.Eq{"is_active": true}).
 		OrderBy("start_date ASC").
-		PlaceholderFormat(squirrel.Dollar).
-		ToSql()
+		PlaceholderFormat(squirrel.Dollar)
 
+	sqlQuery, args, err := query.ToSql()
 	if err != nil {
-		return nil, err
+		return nil, errors.New("failed to build select query")
 	}
 
-	rows, err := r.s.Pool().Query(ctx, query, args...)
+	rows, err := r.s.Pool().Query(ctx, sqlQuery, args...)
 	if err != nil {
-		fmt.Println(err)
-		return nil, err
+		return nil, errors.New("failed to execute query")
 	}
 	defer rows.Close()
 
 	var subscriptions []*Subscription
 	for rows.Next() {
 		var sub Subscription
-		if err := rows.Scan(&sub.Id, &sub.UserId, &sub.Name, &sub.StartDate, &sub.Color, &sub.LogoUrl, &sub.Price); err != nil {
-			return nil, err
+		if err := rows.Scan(
+			&sub.Id, &sub.UserId, &sub.Name, &sub.StartDate, &sub.Color, &sub.LogoUrl, &sub.Price,
+		); err != nil {
+			return nil, errors.New("failed to scan row")
 		}
 		subscriptions = append(subscriptions, &sub)
 	}
