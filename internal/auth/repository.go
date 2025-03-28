@@ -61,9 +61,8 @@ func (r *Repository) CreateUser(ctx context.Context, user *users.User) error {
 		return errors.New("failed to build insert query")
 	}
 
-	err = r.pool.QueryRow(ctx, query, args...).Scan(&user.ID)
-	if errors.Is(err, errors.New("pgx: no rows in result")) {
-		return errors.New("failed to execute insert query")
+	if err := r.pool.QueryRow(ctx, query, args...).Scan(&user.ID); err != nil {
+		return err
 	}
 
 	return nil

@@ -32,39 +32,24 @@ func (a *API) Bind(rg *echo.Group) {
 func (a *API) Register(c echo.Context) error {
 	var req RegisterRequest
 	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Request format is invalid",
-		})
+		return c.JSON(http.StatusBadRequest, ErrorResponse{Error: ErrInvalidFormat.Error()})
 	}
 
-	if err := c.Bind(&req); err != nil {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: "Request format is invalid",
-		})
-	}
-
-	if req.Email == "" || req.Password == "" {
-		return c.JSON(http.StatusBadRequest, ErrorResponse{
-			Error: ErrMissingFields.Error(),
-		})
+	if err := req.Validate(); err != nil {
+		return c.JSON(http.StatusUnprocessableEntity, ErrorResponse{Error: err.Error()})
 	}
 
 	resp, err := a.service.Register(c.Request().Context(), req)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrUserExists):
-			return c.JSON(http.StatusConflict, ErrorResponse{
-				Error: err.Error(),
-			})
-
-		case errors.Is(err, ErrInvalidEmail) || errors.Is(err, ErrPasswordTooWeak) || errors.Is(err, ErrMissingFields):
-			return c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
-				Error: err.Error(),
-			})
+			return c.JSON(http.StatusConflict, ErrorResponse{Error: err.Error()})
+		case errors.Is(err, ErrInvalidEmail),
+			errors.Is(err, ErrPasswordTooWeak),
+			errors.Is(err, ErrMissingFields):
+			return c.JSON(http.StatusUnprocessableEntity, ErrorResponse{Error: err.Error()})
 		default:
-			return c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Error: ErrInternalServer.Error(),
-			})
+			return c.JSON(http.StatusInternalServerError, ErrorResponse{Error: ErrInternalServer.Error()})
 		}
 	}
 

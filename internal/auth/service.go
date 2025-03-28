@@ -9,7 +9,6 @@ import (
 	"figenn/internal/stripe"
 	"figenn/internal/users"
 	"figenn/internal/utils"
-	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -46,23 +45,10 @@ func NewService(repo *Repository, config *Config, mailerClient mailer.Mailer, st
 }
 
 func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterResponse, error) {
-	if req.Email == "" || req.Password == "" || req.FirstName == "" || req.LastName == "" {
-		return nil, ErrMissingFields
-	}
-
-	if !utils.IsValidEmail(req.Email) {
-		return nil, ErrInvalidEmail
-	}
-
-	if !utils.IsStrongPassword(req.Password) {
-		return nil, ErrPasswordTooWeak
-	}
-
 	exists, err := s.repo.UserExistsByEmail(ctx, req.Email)
 	if err != nil && !errors.Is(err, ErrUserNotFound) {
 		return nil, err
 	}
-
 	if exists {
 		return nil, ErrUserExists
 	}
@@ -88,21 +74,15 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		StripeCustomerID:  *stripeID,
 	}
 
-	err = s.repo.CreateUser(ctx, newUser)
-	if err != nil {
-		fmt.Println("Error creating user", err)
+	if err := s.repo.CreateUser(ctx, newUser); err != nil {
 		return nil, err
 	}
 
-	if cacheErr := s.cache.SetWithExpire(newUser.Email, newUser, time.Minute*5); cacheErr != nil {
-		log.Println("Failed to cache user", cacheErr)
-	}
+	_ = s.cache.SetWithExpire(newUser.Email, newUser, 5*time.Minute)
 
 	go utils.SendWelcomeEmail(s.mailer, newUser)
 
-	return &RegisterResponse{
-		Message: "User created successfully",
-	}, nil
+	return &RegisterResponse{Message: "User created successfully"}, nil
 }
 
 func (s *Service) Login(ctx context.Context, req LoginRequest, w http.ResponseWriter) (*string, *string, error) {
