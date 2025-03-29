@@ -40,7 +40,7 @@ func (a *API) Bind(rg *echo.Group) {
 	subGroup := rg.Group("/subscriptions", users.CookieAuthMiddleware(a.JWTSecret))
 
 	subGroup.GET("", a.GetAllSubscriptions)
-	subGroup.POST("/create", a.CreateSubscription)
+	subGroup.POST("", a.CreateSubscription)
 	subGroup.GET("/active", a.ListActiveSubscriptions)
 	subGroup.DELETE("/:id", a.DeleteSubscription)
 	subGroup.PATCH("/:id", a.UpdateSubscription)
@@ -51,6 +51,7 @@ func (a *API) Bind(rg *echo.Group) {
 }
 
 func (a *API) CreateSubscription(c echo.Context) error {
+	ctx := c.Request().Context()
 	var req CreateSubscriptionRequest
 	if err := c.Bind(&req); err != nil {
 		return errors.NewBadRequestError("Invalid request format")
@@ -65,7 +66,7 @@ func (a *API) CreateSubscription(c echo.Context) error {
 		return err
 	}
 
-	if err := a.s.CreateSubscription(c.Request().Context(), userID, req); err != nil {
+	if err := a.s.CreateSubscription(ctx, userID, req); err != nil {
 		return handleServiceError(err)
 	}
 
