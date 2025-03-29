@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+// mockgen -source=internal/subscriptions/handler.go -destination=internal/subscriptions/mocks/mock_database.go -package=mocks
 type SubscriptionStore interface {
 	CreateSubscription(ctx context.Context, sub *Subscription) error
 	GetActiveSubscriptions(ctx context.Context, userID string, year int, month int) ([]*Subscription, error)
@@ -19,6 +20,8 @@ type SubscriptionStore interface {
 	UpdateSubscription(ctx context.Context, userID, subID string, req UpdateSubscriptionRequest) error
 	GetSubscription(ctx context.Context, userID, subID string) (*Subscription, error)
 	GetSubscriptionsByCategory(ctx context.Context, userID string) ([]*Subscription, error)
+	GetUpcomingSubscriptions(ctx context.Context, userID string, week int) ([]*Subscription, error)
+	CalculateActiveSubscriptions(ctx context.Context, userID string, year, month *int) ([]*Subscription, error)
 }
 
 type API struct {
@@ -35,6 +38,7 @@ func NewAPI(secret string, service *Service) *API {
 
 func (a *API) Bind(rg *echo.Group) {
 	subGroup := rg.Group("/subscriptions", users.CookieAuthMiddleware(a.JWTSecret))
+
 	subGroup.GET("", a.GetAllSubscriptions)
 	subGroup.POST("/create", a.CreateSubscription)
 	subGroup.GET("/active", a.ListActiveSubscriptions)
@@ -56,9 +60,9 @@ func (a *API) CreateSubscription(c echo.Context) error {
 		return errors.NewBadRequestError("Invalid billing cycle value")
 	}
 
-	userID, ok := c.Get("user_id").(string)
-	if !ok {
-		return errors.NewUnauthorizedError("")
+	userID, err := getUserID(c)
+	if err != nil {
+		return err
 	}
 
 	if err := a.s.CreateSubscription(c.Request().Context(), userID, req); err != nil {
@@ -68,19 +72,10 @@ func (a *API) CreateSubscription(c echo.Context) error {
 	return c.JSON(http.StatusCreated, echo.Map{"message": "Subscription created successfully"})
 }
 
-func isValidBillingCycle(cycle BillingCycleType) bool {
-	switch cycle {
-	case Monthly, Quarterly, Annual:
-		return true
-	default:
-		return false
-	}
-}
-
 func (a *API) ListActiveSubscriptions(c echo.Context) error {
-	userID, ok := c.Get("user_id").(string)
-	if !ok {
-		return errors.NewUnauthorizedError("")
+	userID, err := getUserID(c)
+	if err != nil {
+		return err
 	}
 
 	year, err := utils.ValidateYear(c.QueryParam("year"))
@@ -102,9 +97,9 @@ func (a *API) ListActiveSubscriptions(c echo.Context) error {
 }
 
 func (a *API) GetAllSubscriptions(c echo.Context) error {
-	userID, ok := c.Get("user_id").(string)
-	if !ok {
-		return errors.NewUnauthorizedError("")
+	userID, err := getUserID(c)
+	if err != nil {
+		return err
 	}
 
 	limit, offset, err := utils.GetPaginationParams(c)
@@ -121,9 +116,9 @@ func (a *API) GetAllSubscriptions(c echo.Context) error {
 }
 
 func (a *API) DeleteSubscription(c echo.Context) error {
-	userID, ok := c.Get("user_id").(string)
-	if !ok {
-		return errors.NewUnauthorizedError("")
+	userID, err := getUserID(c)
+	if err != nil {
+		return err
 	}
 
 	subID := c.Param("id")
@@ -139,10 +134,9 @@ func (a *API) DeleteSubscription(c echo.Context) error {
 }
 
 func (a *API) UpdateSubscription(c echo.Context) error {
-
-	userID, ok := c.Get("user_id").(string)
-	if !ok {
-		return errors.NewUnauthorizedError("")
+	userID, err := getUserID(c)
+	if err != nil {
+		return err
 	}
 
 	subID := c.Param("id")
@@ -163,9 +157,9 @@ func (a *API) UpdateSubscription(c echo.Context) error {
 }
 
 func (a *API) GetSubscription(c echo.Context) error {
-	userID, ok := c.Get("user_id").(string)
-	if !ok {
-		return errors.NewUnauthorizedError("")
+	userID, err := getUserID(c)
+	if err != nil {
+		return err
 	}
 
 	subID := c.Param("id")
@@ -181,45 +175,20 @@ func (a *API) GetSubscription(c echo.Context) error {
 	return c.JSON(http.StatusOK, sub)
 }
 
-func handleServiceError(err error) error {
-	switch err {
-	case ErrUserIDAndSubIDRequired:
-		return errors.NewBadRequestError("User ID and Subscription ID are required")
-	case ErrSubscriptionNotFound:
-		return errors.NewNotFoundError("Subscription not found")
-	case ErrUserPermissionDenied:
-		return errors.NewForbiddenError("You are not authorized to perform this action")
-	case ErrFailedCreateSub:
-		return errors.NewInternalServerError("Failed to create subscription")
-	default:
-		return errors.NewInternalServerError("An unexpected error occurred")
-	}
-}
-
 func (a *API) CalculateActiveSubscriptions(c echo.Context) error {
-	userID, ok := c.Get("user_id").(string)
-	if !ok {
-		return errors.NewUnauthorizedError("")
+	userID, err := getUserID(c)
+	if err != nil {
+		return err
 	}
 
-	yearStr := c.QueryParam("year")
-	monthStr := c.QueryParam("month")
-
-	var year, month *int
-	if yearStr != "" {
-		y, err := utils.ValidateYear(yearStr)
-		if err != nil {
-			return errors.NewBadRequestError(err.Error())
-		}
-		year = &y
+	year, err := optionalIntFromQuery(c, "year", utils.ValidateYear)
+	if err != nil {
+		return errors.NewBadRequestError(err.Error())
 	}
 
-	if monthStr != "" {
-		m, err := utils.ValidateMonth(monthStr)
-		if err != nil {
-			return errors.NewBadRequestError(err.Error())
-		}
-		month = &m
+	month, err := optionalIntFromQuery(c, "month", utils.ValidateMonth)
+	if err != nil {
+		return errors.NewBadRequestError(err.Error())
 	}
 
 	subs, err := a.s.CalculateActiveSubscriptions(c.Request().Context(), userID, year, month)
@@ -231,22 +200,22 @@ func (a *API) CalculateActiveSubscriptions(c echo.Context) error {
 }
 
 func (a *API) GetUpcomingSubscriptions(c echo.Context) error {
-	userID, ok := c.Get("user_id").(string)
-	if !ok {
-		return errors.NewUnauthorizedError("")
+	userID, err := getUserID(c)
+	if err != nil {
+		return err
 	}
 
-	week := c.QueryParam("week")
-	if week == "" {
+	weekStr := c.QueryParam("week")
+	if weekStr == "" {
 		return errors.NewBadRequestError("Week is required")
 	}
 
-	weekInt, err := strconv.Atoi(week)
+	week, err := strconv.Atoi(weekStr)
 	if err != nil {
 		return errors.NewBadRequestError("Invalid week value")
 	}
 
-	subs, err := a.s.GetUpcomingSubscriptions(c.Request().Context(), userID, weekInt)
+	subs, err := a.s.GetUpcomingSubscriptions(c.Request().Context(), userID, week)
 	if err != nil {
 		return errors.NewInternalServerError("Failed to fetch subscriptions")
 	}
@@ -255,17 +224,59 @@ func (a *API) GetUpcomingSubscriptions(c echo.Context) error {
 }
 
 func (a *API) GetSubscriptionsByCategory(c echo.Context) error {
-	ctx := c.Request().Context()
-
-	userID, ok := c.Get("user_id").(string)
-	if !ok || userID == "" {
-		return errors.NewUnauthorizedError("")
+	userID, err := getUserID(c)
+	if err != nil {
+		return err
 	}
 
-	counts, err := a.s.GetSubscriptionsByCategory(ctx, userID)
+	counts, err := a.s.GetSubscriptionsByCategory(c.Request().Context(), userID)
 	if err != nil {
-		return errors.NewInternalServerError("failed to fetch subscription counts by category")
+		return errors.NewInternalServerError("Failed to fetch subscription counts by category")
 	}
 
 	return c.JSON(http.StatusOK, counts)
+}
+
+func isValidBillingCycle(cycle BillingCycleType) bool {
+	switch cycle {
+	case Monthly, Quarterly, Annual:
+		return true
+	default:
+		return false
+	}
+}
+
+func getUserID(c echo.Context) (string, error) {
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return "", errors.NewUnauthorizedError("")
+	}
+	return userID, nil
+}
+
+func optionalIntFromQuery(c echo.Context, key string, validate func(string) (int, error)) (*int, error) {
+	val := c.QueryParam(key)
+	if val == "" {
+		return nil, nil
+	}
+	v, err := validate(val)
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+func handleServiceError(err error) error {
+	switch err {
+	case ErrUserIDAndSubIDRequired:
+		return errors.NewBadRequestError("User ID and Subscription ID are required")
+	case ErrSubscriptionNotFound:
+		return errors.NewNotFoundError("Subscription not found")
+	case ErrUserPermissionDenied:
+		return errors.NewForbiddenError("You are not authorized to perform this action")
+	case ErrFailedCreateSub:
+		return errors.NewInternalServerError("Failed to create subscription")
+	default:
+		return errors.NewInternalServerError("Unexpected subscription service error")
+	}
 }

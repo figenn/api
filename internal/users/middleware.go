@@ -1,7 +1,7 @@
 package users
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -11,31 +11,35 @@ import (
 func CookieAuthMiddleware(secret string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			accessTokenCookie, err := c.Cookie("accessToken")
+			cookie, err := c.Cookie("accessToken")
 			if err != nil {
-				fmt.Printf("Erreur lors de la récupération du cookie 'accessToken': %v\n", err)
-				return echo.NewHTTPError(http.StatusUnauthorized, "Missing token")
+				return echo.NewHTTPError(http.StatusUnauthorized, "Missing access token")
 			}
-			tokenString := accessTokenCookie.Value
 
-			token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, fmt.Errorf("méthode de signature inattendue: %v", token.Header["alg"])
+			token, err := jwt.Parse(cookie.Value, func(t *jwt.Token) (interface{}, error) {
+				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, errors.New("unexpected signing method")
 				}
 				return []byte(secret), nil
 			})
-
 			if err != nil || !token.Valid {
 				return echo.NewHTTPError(http.StatusUnauthorized, "Invalid or expired token")
 			}
 
-			if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-				if userID, ok := claims["user_id"].(string); ok {
-					c.Set("user_id", userID)
-				}
-				if email, ok := claims["email"].(string); ok {
-					c.Set("email", email)
-				}
+			claims, ok := token.Claims.(jwt.MapClaims)
+			if !ok {
+				return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token claims")
+			}
+
+			userID, ok := claims["user_id"].(string)
+			if !ok || userID == "" {
+				return echo.NewHTTPError(http.StatusUnauthorized, "Missing user ID in token")
+			}
+
+			c.Set("user_id", userID)
+
+			if email, ok := claims["email"].(string); ok {
+				c.Set("email", email)
 			}
 
 			return next(c)
