@@ -2,6 +2,8 @@ package subscriptions
 
 import "time"
 
+// === Domain Model ===
+
 type Subscription struct {
 	Id           string           `json:"id"`
 	UserId       string           `json:"user_id"`
@@ -10,14 +12,16 @@ type Subscription struct {
 	Color        string           `json:"color"`
 	Description  string           `json:"description"`
 	StartDate    time.Time        `json:"start_date"`
-	EndDate      *time.Time       `json:"end_date"`
+	EndDate      *time.Time       `json:"end_date,omitempty"`
 	Price        float64          `json:"price"`
-	LogoUrl      *string          `json:"logo_url"`
+	LogoUrl      *string          `json:"logo_url,omitempty"`
 	IsActive     bool             `json:"is_active"`
 	BillingCycle BillingCycleType `json:"billing_cycle"`
 	CreatedAt    time.Time        `json:"created_at"`
 	UpdatedAt    time.Time        `json:"updated_at"`
 }
+
+// === Enums ===
 
 type BillingCycleType string
 
@@ -26,6 +30,8 @@ const (
 	Quarterly BillingCycleType = "quarterly"
 	Annual    BillingCycleType = "annual"
 )
+
+// === API Requests ===
 
 type CreateSubscriptionRequest struct {
 	Name         string           `json:"name" form:"name"`
@@ -40,14 +46,6 @@ type CreateSubscriptionRequest struct {
 	IsRecuring   bool             `json:"is_recuring" form:"is_recuring"`
 }
 
-type LogoResponse struct {
-	ID       int    `json:"id"`
-	Title    string `json:"title"`
-	Category string `json:"category"`
-	Route    string `json:"route"`
-	URL      string `json:"url"`
-}
-
 type UpdateSubscriptionRequest struct {
 	Name        *string    `json:"name,omitempty" form:"name"`
 	Category    *string    `json:"category,omitempty" form:"category"`
@@ -59,6 +57,8 @@ type UpdateSubscriptionRequest struct {
 	IsActive    *bool      `json:"is_active,omitempty" form:"is_active"`
 	IsRecuring  *bool      `json:"is_recuring,omitempty" form:"is_recuring"`
 }
+
+// === API Response ===
 
 type SubscriptionCategoryCount struct {
 	Category string `json:"category"`

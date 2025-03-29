@@ -12,8 +12,6 @@ DB_PORT=${BLUEPRINT_DB_PORT}
 DB_NAME=${BLUEPRINT_DB_DATABASE}
 DB_SCHEMA=${BLUEPRINT_DB_SCHEMA}
 
-export SMTP_HOST= "mailhog"
-
 echo "🔄 Attente de la base de données PostgreSQL ($DB_HOST:$DB_PORT)..."
 until PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c '\q' >/dev/null 2>&1; do
   echo "⏳ En attente que PostgreSQL soit prêt..."

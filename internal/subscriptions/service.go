@@ -2,35 +2,29 @@ package subscriptions
 
 import (
 	"context"
+	"errors"
 	"time"
-
-	"github.com/bluele/gcache"
 )
 
 type Service struct {
-	repo  *Repository
-	cache gcache.Cache
+	r *Repository
 }
 
 func NewService(repo *Repository) *Service {
 	return &Service{
-		repo:  repo,
-		cache: gcache.New(100).LRU().Expiration(time.Minute * 5).Build(),
+		r: repo,
 	}
 }
 
 func (s *Service) CreateSubscription(ctx context.Context, userID string, req CreateSubscriptionRequest) error {
-	if userID == "" {
-		return ErrUserIDAndSubIDRequired
-	}
-
-	subscription := &Subscription{
+	sub := &Subscription{
 		UserId:       userID,
 		Name:         req.Name,
 		Category:     req.Category,
 		Color:        req.Color,
 		Description:  req.Description,
-		StartDate:    *req.StartDate,
+		StartDate:    time.Now(),
+		EndDate:      req.EndDate,
 		Price:        req.Price,
 		LogoUrl:      &req.LogoUrl,
 		BillingCycle: req.BillingCycle,
@@ -38,41 +32,65 @@ func (s *Service) CreateSubscription(ctx context.Context, userID string, req Cre
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
+	return s.r.CreateSubscription(ctx, sub)
+}
 
-	return s.repo.CreateSubscription(ctx, subscription)
+func (r *Repository) GetActiveSubscriptions(ctx context.Context, userID string, year, month int) ([]*Subscription, error) {
+	query := `
+		SELECT id, user_id, name, category, color, description, start_date, end_date, price,
+			   logo_url, is_active, billing_cycle
+		FROM subscriptions
+		WHERE user_id = $1
+		AND is_active = TRUE
+		AND (
+			(EXTRACT(YEAR FROM start_date) = $2 AND EXTRACT(MONTH FROM start_date) = $3)
+			OR (end_date IS NOT NULL AND EXTRACT(YEAR FROM end_date) = $2 AND EXTRACT(MONTH FROM end_date) = $3)
+			OR (billing_cycle = 'monthly' AND start_date <= DATE($2 || '-' || $3 || '-01'))
+			OR (billing_cycle = 'quarterly' AND start_date <= DATE($2 || '-' || $3 || '-01') AND MOD(EXTRACT(MONTH FROM start_date) - $3 + 12 * (EXTRACT(YEAR FROM start_date) - $2), 3) = 0)
+			OR (billing_cycle = 'semi_annual' AND start_date <= DATE($2 || '-' || $3 || '-01') AND MOD(EXTRACT(MONTH FROM start_date) - $3 + 12 * (EXTRACT(YEAR FROM start_date) - $2), 6) = 0)
+			OR (billing_cycle = 'annual' AND start_date <= DATE($2 || '-' || $3 || '-01') AND EXTRACT(MONTH FROM start_date) = $3)
+			OR (billing_cycle = 'one_time' AND EXTRACT(YEAR FROM start_date) = $2 AND EXTRACT(MONTH FROM start_date) = $3)
+		)
+		ORDER BY start_date ASC`
+
+	rows, err := r.db.Pool().Query(ctx, query, userID, year, month)
+	if err != nil {
+		return nil, errors.New("failed to execute active subscriptions query")
+	}
+	defer rows.Close()
+
+	var subscriptions []*Subscription
+	for rows.Next() {
+		sub := new(Subscription)
+		err := rows.Scan(
+			&sub.Id, &sub.UserId, &sub.Name, &sub.Category, &sub.Color,
+			&sub.Description, &sub.StartDate, &sub.EndDate, &sub.Price,
+			&sub.LogoUrl, &sub.IsActive, &sub.BillingCycle,
+		)
+		if err != nil {
+			return nil, errors.New("failed to scan active subscription row")
+		}
+		subscriptions = append(subscriptions, sub)
+	}
+	return subscriptions, rows.Err()
 }
 
 func (s *Service) ListActiveSubscriptions(ctx context.Context, userID string, year, month int) ([]*Subscription, error) {
 	if userID == "" {
 		return nil, ErrUserIDAndSubIDRequired
 	}
-
-	return s.repo.GetActiveSubscriptions(ctx, userID, year, month)
+	return s.r.GetActiveSubscriptions(ctx, userID, year, month)
 }
 
 func (s *Service) GetAllSubscriptions(ctx context.Context, userID string, limit, offset int) ([]*Subscription, error) {
-	if userID == "" {
-		return nil, ErrUserIDAndSubIDRequired
-	}
-
-	return s.repo.GetAllSubscriptions(ctx, userID, limit, offset)
+	return s.r.GetAllSubscriptions(ctx, userID, limit, offset)
 }
 
 func (s *Service) DeleteSubscription(ctx context.Context, userID, subID string) error {
 	if userID == "" || subID == "" {
 		return ErrUserIDAndSubIDRequired
 	}
-
-	subscription, err := s.repo.GetSubscriptionByID(ctx, userID, subID)
-	if err != nil || subscription == nil {
-		return ErrSubscriptionNotFound
-	}
-
-	if subscription.UserId != userID {
-		return ErrUserPermissionDenied
-	}
-
-	return s.repo.DeleteSubscription(ctx, userID, subID)
+	return s.r.DeleteSubscription(ctx, userID, subID)
 }
 
 func (s *Service) UpdateSubscription(ctx context.Context, userID, subID string, req UpdateSubscriptionRequest) error {
@@ -80,17 +98,7 @@ func (s *Service) UpdateSubscription(ctx context.Context, userID, subID string, 
 		return ErrUserIDAndSubIDRequired
 	}
 
-	subscription, err := s.repo.GetSubscriptionByID(ctx, userID, subID)
-	if err != nil || subscription == nil {
-		return ErrSubscriptionNotFound
-	}
-
-	if subscription.UserId != userID {
-		return ErrUserPermissionDenied
-	}
-
 	fields := make(map[string]interface{})
-
 	if req.Name != nil {
 		fields["name"] = *req.Name
 	}
@@ -123,51 +131,26 @@ func (s *Service) UpdateSubscription(ctx context.Context, userID, subID string, 
 		return ErrNoFieldsToUpdate
 	}
 
-	return s.repo.UpdateSubscription(ctx, userID, subID, fields)
+	fields["updated_at"] = time.Now()
+
+	return s.r.UpdateSubscription(ctx, userID, subID, fields)
 }
 
 func (s *Service) GetSubscription(ctx context.Context, userID, subID string) (*Subscription, error) {
 	if userID == "" || subID == "" {
 		return nil, ErrUserIDAndSubIDRequired
 	}
-
-	subscription, err := s.repo.GetSubscriptionByID(ctx, userID, subID)
-	if err != nil || subscription == nil {
-		return nil, ErrSubscriptionNotFound
-	}
-
-	return subscription, nil
+	return s.r.GetSubscriptionByID(ctx, userID, subID)
 }
 
 func (s *Service) CalculateActiveSubscriptions(ctx context.Context, userID string, year, month *int) (float64, error) {
-	if userID == "" {
-		return 0, ErrUserIDAndSubIDRequired
-	}
-
-	total, err := s.repo.CalculateActiveSubscriptionPrice(ctx, userID, year, month)
-	if err != nil {
-		return 0, err
-	}
-
-	return total, nil
+	return s.r.CalculateActiveSubscriptionPrice(ctx, userID, year, month)
 }
 
 func (s *Service) GetUpcomingSubscriptions(ctx context.Context, userID string, week int) ([]*Subscription, error) {
-	if userID == "" {
-		return nil, ErrUserIDAndSubIDRequired
-	}
-
-	if week < 1 || week > 52 {
-		return nil, ErrInvalidWeek
-	}
-
-	return s.repo.GetUpcomingSubscriptions(ctx, userID, week)
+	return s.r.GetUpcomingSubscriptions(ctx, userID, week)
 }
 
 func (s *Service) GetSubscriptionsByCategory(ctx context.Context, userID string) ([]*SubscriptionCategoryCount, error) {
-	if userID == "" {
-		return nil, ErrUserIDAndSubIDRequired
-	}
-
-	return s.repo.GetSubscriptionsByCategory(ctx, userID)
+	return s.r.GetSubscriptionsByCategory(ctx, userID)
 }
