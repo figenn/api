@@ -23,7 +23,7 @@ func (s *Service) CreateSubscription(ctx context.Context, userID string, req Cre
 		Category:     req.Category,
 		Color:        req.Color,
 		Description:  req.Description,
-		StartDate:    time.Now(),
+		StartDate:    *req.StartDate,
 		EndDate:      req.EndDate,
 		Price:        req.Price,
 		LogoUrl:      &req.LogoUrl,
