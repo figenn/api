@@ -59,3 +59,8 @@ type UpdateSubscriptionRequest struct {
 	IsActive    *bool      `json:"is_active,omitempty" form:"is_active"`
 	IsRecuring  *bool      `json:"is_recuring,omitempty" form:"is_recuring"`
 }
+
+type SubscriptionCategoryCount struct {
+	Category string `json:"category"`
+	Count    int    `json:"count"`
+}

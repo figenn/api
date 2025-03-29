@@ -166,14 +166,7 @@ func generateRefreshToken(user *users.User, secret string, duration time.Duratio
 	return refreshTokenString, nil
 }
 
-func (s *Service) RefreshToken(ctx context.Context, r *http.Request, w http.ResponseWriter) (*LoginResponse, error) {
-	refreshTokenCookie, err := r.Cookie("refreshToken")
-	if err != nil {
-		return nil, ErrInvalidToken
-	}
-
-	refreshToken := refreshTokenCookie.Value
-
+func (s *Service) RefreshToken(ctx context.Context, refreshToken string) (*string, *string, error) {
 	token, err := jwt.Parse(refreshToken, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("invalid signing method")
@@ -181,77 +174,55 @@ func (s *Service) RefreshToken(ctx context.Context, r *http.Request, w http.Resp
 		return []byte(s.config.JWTSecret), nil
 	})
 
-	if err != nil {
-		return nil, ErrInvalidToken
+	if err != nil || !token.Valid {
+		return nil, nil, ErrInvalidToken
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok || !token.Valid {
-		return nil, ErrInvalidToken
+	if !ok {
+		return nil, nil, ErrInvalidToken
 	}
 
 	userIDStr, ok := claims["user_id"].(string)
 	if !ok {
-		return nil, ErrInvalidToken
+		return nil, nil, ErrInvalidToken
 	}
+
 	userID, err := uuid.Parse(userIDStr)
 	if err != nil {
-		return nil, ErrInvalidToken
+		return nil, nil, ErrInvalidToken
 	}
 
 	tokenType, ok := claims["type"].(string)
 	if !ok || tokenType != "refresh" {
-		return nil, ErrInvalidToken
+		return nil, nil, ErrInvalidToken
 	}
 
-	validRefreshToken, err := s.repo.VerifyRefreshToken(ctx, userID, refreshToken)
-	if err != nil || !validRefreshToken {
-		return nil, ErrInvalidToken
+	valid, err := s.repo.VerifyRefreshToken(ctx, userID, refreshToken)
+	if err != nil || !valid {
+		return nil, nil, ErrInvalidToken
 	}
 
 	user, err := s.repo.GetUserByID(ctx, userID)
 	if err != nil {
-		return nil, ErrUserNotFound
+		return nil, nil, ErrUserNotFound
 	}
 
 	newAccessToken, err := generateToken(user, s.config.JWTSecret, s.config.TokenDuration)
 	if err != nil {
-		return nil, err
+		return nil, nil, ErrInternalServer
 	}
 
 	newRefreshToken, err := generateRefreshToken(user, s.config.JWTSecret, s.config.RefreshTokenDuration)
 	if err != nil {
-		return nil, err
+		return nil, nil, ErrInternalServer
 	}
 
-	err = s.repo.SaveRefreshToken(ctx, user.ID, newRefreshToken)
-	if err != nil {
-		return nil, ErrInternalServer
+	if err := s.repo.SaveRefreshToken(ctx, user.ID, newRefreshToken); err != nil {
+		return nil, nil, ErrInternalServer
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "accessToken",
-		Value:    newAccessToken,
-		HttpOnly: true,
-		Secure:   s.config.Environment == "production",
-		SameSite: http.SameSiteStrictMode,
-		Path:     "/",
-		Expires:  time.Now().Add(s.config.TokenDuration),
-	})
-
-	http.SetCookie(w, &http.Cookie{
-		Name:     "refreshToken",
-		Value:    newRefreshToken,
-		HttpOnly: true,
-		Secure:   s.config.Environment == "production",
-		SameSite: http.SameSiteStrictMode,
-		Path:     "/api",
-		Expires:  time.Now().Add(s.config.RefreshTokenDuration),
-	})
-
-	return &LoginResponse{
-		Token: newAccessToken,
-	}, nil
+	return &newAccessToken, &newRefreshToken, nil
 }
 
 func (s *Service) Logout(w http.ResponseWriter) {

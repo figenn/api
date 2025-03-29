@@ -163,3 +163,11 @@ func (s *Service) GetUpcomingSubscriptions(ctx context.Context, userID string, w
 
 	return s.repo.GetUpcomingSubscriptions(ctx, userID, week)
 }
+
+func (s *Service) GetSubscriptionsByCategory(ctx context.Context, userID string) ([]*SubscriptionCategoryCount, error) {
+	if userID == "" {
+		return nil, ErrUserIDAndSubIDRequired
+	}
+
+	return s.repo.GetSubscriptionsByCategory(ctx, userID)
+}

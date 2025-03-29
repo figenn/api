@@ -305,3 +305,38 @@ func (r *Repository) GetUpcomingSubscriptions(ctx context.Context, userID string
 
 	return subscriptions, nil
 }
+
+func (r *Repository) GetSubscriptionsByCategory(ctx context.Context, userID string) ([]*SubscriptionCategoryCount, error) {
+	query := squirrel.
+		Select("category", "COUNT(*) AS count").
+		From("subscriptions").
+		Where(squirrel.And{
+			squirrel.Eq{"user_id": userID},
+			squirrel.Eq{"is_active": true},
+		}).
+		GroupBy("category").
+		OrderBy("count DESC").
+		PlaceholderFormat(squirrel.Dollar)
+
+	sqlQuery, args, err := query.ToSql()
+	if err != nil {
+		return nil, errors.New("failed to build category count query")
+	}
+
+	rows, err := r.s.Pool().Query(ctx, sqlQuery, args...)
+	if err != nil {
+		return nil, errors.New("failed to execute category count query")
+	}
+	defer rows.Close()
+
+	var result []*SubscriptionCategoryCount
+	for rows.Next() {
+		var item SubscriptionCategoryCount
+		if err := rows.Scan(&item.Category, &item.Count); err != nil {
+			return nil, errors.New("failed to scan category count row")
+		}
+		result = append(result, &item)
+	}
+
+	return result, nil
+}

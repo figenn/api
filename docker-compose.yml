@@ -21,6 +21,9 @@ services:
         condition: service_healthy
     networks:
       - blueprint
+    volumes:
+      - .env:/app/.env
+
   postgres:
     image: postgres:latest
     restart: unless-stopped
@@ -44,6 +47,7 @@ services:
       start_period: 15s
     networks:
       - blueprint
+
   mailhog:
     image: mailhog/mailhog:latest
     restart: unless-stopped

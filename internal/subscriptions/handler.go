@@ -18,6 +18,7 @@ type SubscriptionStore interface {
 	DeleteSubscription(ctx context.Context, userID, subID string) error
 	UpdateSubscription(ctx context.Context, userID, subID string, req UpdateSubscriptionRequest) error
 	GetSubscription(ctx context.Context, userID, subID string) (*Subscription, error)
+	GetSubscriptionsByCategory(ctx context.Context, userID string) ([]*Subscription, error)
 }
 
 type API struct {
@@ -42,6 +43,7 @@ func (a *API) Bind(rg *echo.Group) {
 	subGroup.GET("/:id", a.GetSubscription)
 	subGroup.GET("/calculate", a.CalculateActiveSubscriptions)
 	subGroup.GET("/upcoming", a.GetUpcomingSubscriptions)
+	subGroup.GET("/by_category", a.GetSubscriptionsByCategory)
 }
 
 func (a *API) CreateSubscription(c echo.Context) error {
@@ -250,4 +252,20 @@ func (a *API) GetUpcomingSubscriptions(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, subs)
+}
+
+func (a *API) GetSubscriptionsByCategory(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	userID, ok := c.Get("user_id").(string)
+	if !ok || userID == "" {
+		return errors.NewUnauthorizedError("")
+	}
+
+	counts, err := a.s.GetSubscriptionsByCategory(ctx, userID)
+	if err != nil {
+		return errors.NewInternalServerError("failed to fetch subscription counts by category")
+	}
+
+	return c.JSON(http.StatusOK, counts)
 }
