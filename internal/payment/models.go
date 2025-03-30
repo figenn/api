@@ -1,4 +1,4 @@
-package stripe
+package payment
 
 type CheckoutSessionParams struct {
 	PriceID    string `json:"price_id" form:"price_id"`

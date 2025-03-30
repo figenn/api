@@ -1,4 +1,4 @@
-package stripe
+package payment
 
 import (
 	"encoding/json"
@@ -14,7 +14,7 @@ import (
 	"github.com/stripe/stripe-go/v81/customer"
 )
 
-type StripeService interface {
+type PaymentService interface {
 	CreateCheckoutSession(params *CheckoutSessionParams) (*stripe.CheckoutSession, error)
 	GetSubscription(subscriptionID string) (*stripe.Subscription, error)
 	CancelSubscription(subscriptionID string) (*stripe.Subscription, error)
