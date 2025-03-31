@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stripe/stripe-go/v81"
@@ -51,25 +52,40 @@ func (s *Service) CreateCustomer(email, firstName, lastName string) (*string, er
 	return &result.ID, nil
 }
 
-func (s *Service) CreateCheckoutSession(params *CheckoutSessionParams) (*stripe.CheckoutSession, error) {
-	sessionParams := &stripe.CheckoutSessionParams{
+func (s *Service) CreateCheckoutSession(req *CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+	priceMap := map[string]string{
+		"premium": "price_1R1zTpG72A5CyjpR5Iw2sQJH",
+		"pro":     "price_1R26rXG72A5CyjpRjnylykuT",
+	}
+
+	priceID, ok := priceMap[req.Plan]
+	if !ok {
+		if req.Plan == "" {
+			return nil, ErrMissingPriceID
+		}
+		return nil, ErrInvalidPriceID
+	}
+
+	appURL := os.Getenv("APP_URL")
+
+	params := &stripe.CheckoutSessionParams{
 		PaymentMethodTypes: stripe.StringSlice([]string{"card", "revolut_pay", "paypal"}),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{
-				Price:    stripe.String(params.PriceID),
+				Price:    stripe.String(priceID),
 				Quantity: stripe.Int64(1),
 			},
 		},
 		Mode:       stripe.String(string(stripe.CheckoutSessionModeSubscription)),
-		SuccessURL: stripe.String(params.SuccessURL),
-		CancelURL:  stripe.String(params.CancelURL),
+		SuccessURL: stripe.String(appURL + "/success"),
+		CancelURL:  stripe.String(appURL + "/cancel"),
 	}
 
-	if params.CustomerId != "" {
-		sessionParams.Customer = stripe.String(params.CustomerId)
+	if req.CustomerId != "" {
+		params.Customer = stripe.String(req.CustomerId)
 	}
 
-	return s.client.CheckoutSessions.New(sessionParams)
+	return s.client.CheckoutSessions.New(params)
 }
 
 func (s *Service) GetSubscription(subscriptionID string) (*stripe.Subscription, error) {
