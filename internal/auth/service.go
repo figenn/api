@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"figenn/internal/mailer"
-	"figenn/internal/stripe"
+	"figenn/internal/payment"
 	"figenn/internal/users"
 	"figenn/internal/utils"
 	"log"
@@ -28,19 +28,19 @@ type Config struct {
 
 type Service struct {
 	repo   *Repository
-	s      *stripe.Service
+	s      *payment.Service
 	config Config
 	cache  gcache.Cache
 	mailer mailer.Mailer
 }
 
-func NewService(repo *Repository, config *Config, mailerClient mailer.Mailer, stripeService *stripe.Service) *Service {
+func NewService(repo *Repository, config *Config, mailerClient mailer.Mailer, paymentService *payment.Service) *Service {
 	return &Service{
 		repo:   repo,
 		config: *config,
 		cache:  gcache.New(100).LRU().Expiration(time.Minute * 5).Build(),
 		mailer: mailerClient,
-		s:      stripeService,
+		s:      paymentService,
 	}
 }
 

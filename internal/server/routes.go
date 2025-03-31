@@ -3,8 +3,9 @@ package server
 import (
 	"figenn/internal/auth"
 	"figenn/internal/mailer"
+	"figenn/internal/payment"
+	stripe "figenn/internal/payment"
 	"figenn/internal/powens"
-	"figenn/internal/stripe"
 	"figenn/internal/subscriptions"
 	"figenn/internal/users"
 	"fmt"
@@ -51,14 +52,14 @@ func (s *Server) setupSubscriptionRoutes(apiGroup *echo.Group) {
 
 func (s *Server) newAuthAPI() *auth.API {
 	authRepo := auth.NewRepository(s.db.Pool())
-	stripeService := stripe.NewService(os.Getenv("STRIPE_SECRET_KEY"), users.NewRepository(s.db))
+	paymentService := payment.NewService(os.Getenv("STRIPE_SECRET_KEY"), users.NewRepository(s.db))
 	authService := auth.NewService(authRepo, &auth.Config{
 		JWTSecret:            s.config.JWTSecret,
 		TokenDuration:        time.Minute * 30,
 		RefreshTokenDuration: time.Hour * 24 * 7 * 4,
 		AppURL:               os.Getenv("APP_URL"),
 		Environment:          os.Getenv("APP_ENV"),
-	}, mailer.NewMailer(), stripeService)
+	}, mailer.NewMailer(), paymentService)
 
 	return auth.NewAPI(authService)
 }
