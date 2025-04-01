@@ -9,6 +9,9 @@ build:
 	
 	@go build -o main cmd/api/main.go
 
+up: 
+	docker compose up --build
+
 # Run the application
 run:
 	@go run cmd/api/main.go
