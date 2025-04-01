@@ -2,10 +2,7 @@ package payment
 
 import (
 	"encoding/json"
-	"figenn/internal/users"
-	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 
@@ -23,17 +20,24 @@ type PaymentService interface {
 }
 
 type Service struct {
-	client *client.API
-	r      *users.Repository
+	client  *client.API
+	r       *Repository
+	appUrl  string
+	planMap map[string]string
 }
 
-func NewService(apiKey string, repository *users.Repository) *Service {
+func NewService(apiKey string, repo *Repository) *Service {
 	sc := &client.API{}
 	sc.Init(apiKey, nil)
 
 	return &Service{
 		client: sc,
-		r:      repository,
+		r:      repo,
+		appUrl: os.Getenv("APP_URL"),
+		planMap: map[string]string{
+			"premium": os.Getenv("PREMIUM_PRICE_ID"),
+			"pro":     os.Getenv("PRO_PRICE_ID"),
+		},
 	}
 }
 
@@ -41,7 +45,7 @@ func (s *Service) CreateCustomer(email, firstName, lastName string) (*string, er
 	stripe.Key = s.client.AppsSecrets.Key
 	stripeCustomer := &stripe.CustomerParams{
 		Email: stripe.String(email),
-		Name:  stripe.String(fmt.Sprintf("%s %s", firstName, lastName)),
+		Name:  stripe.String(firstName + " " + lastName),
 	}
 
 	result, err := customer.New(stripeCustomer)
@@ -53,32 +57,23 @@ func (s *Service) CreateCustomer(email, firstName, lastName string) (*string, er
 }
 
 func (s *Service) CreateCheckoutSession(req *CheckoutSessionParams) (*stripe.CheckoutSession, error) {
-	priceMap := map[string]string{
-		"premium": "price_1R1zTpG72A5CyjpR5Iw2sQJH",
-		"pro":     "price_1R26rXG72A5CyjpRjnylykuT",
-	}
-
-	priceID, ok := priceMap[req.Plan]
+	priceID, ok := s.planMap[req.Plan]
 	if !ok {
-		if req.Plan == "" {
+		if req.Plan != "premium" && req.Plan != "pro" {
 			return nil, ErrMissingPriceID
 		}
 		return nil, ErrInvalidPriceID
 	}
 
-	appURL := os.Getenv("APP_URL")
-
 	params := &stripe.CheckoutSessionParams{
-		PaymentMethodTypes: stripe.StringSlice([]string{"card", "revolut_pay", "paypal"}),
-		LineItems: []*stripe.CheckoutSessionLineItemParams{
-			{
-				Price:    stripe.String(priceID),
-				Quantity: stripe.Int64(1),
-			},
-		},
+		PaymentMethodTypes: stripe.StringSlice([]string{"card", "revolut_pay"}),
+		LineItems: []*stripe.CheckoutSessionLineItemParams{{
+			Price:    stripe.String(priceID),
+			Quantity: stripe.Int64(1),
+		}},
 		Mode:       stripe.String(string(stripe.CheckoutSessionModeSubscription)),
-		SuccessURL: stripe.String(appURL + "/success"),
-		CancelURL:  stripe.String(appURL + "/cancel"),
+		SuccessURL: stripe.String(s.appUrl + "/dashboard?payout=success"),
+		CancelURL:  stripe.String(s.appUrl + "/dashboard?payout=cancel"),
 	}
 
 	if req.CustomerId != "" {
@@ -97,71 +92,38 @@ func (s *Service) CancelSubscription(subscriptionID string) (*stripe.Subscriptio
 }
 
 func (s *Service) HandleWebhook(c echo.Context) error {
+	ctx := c.Request().Context()
 	body, err := io.ReadAll(c.Request().Body)
-
 	if err != nil {
-		return c.String(http.StatusInternalServerError, "Error reading body")
+		return c.NoContent(http.StatusInternalServerError)
 	}
 	defer c.Request().Body.Close()
 
-	event := stripe.Event{}
+	var event stripe.Event
 	if err := json.Unmarshal(body, &event); err != nil {
-		return c.String(http.StatusBadRequest, "Invalid JSON")
+		return c.NoContent(http.StatusBadRequest)
 	}
+
+	var handlerErr error
 
 	switch event.Type {
 	case "invoice.payment_succeeded":
-		log.Println("Invoice payment succeeded")
-
-		// Vous pouvez obtenir les informations sur la facture et l'abonnement ici
-		var invoice stripe.Invoice
-		err := json.Unmarshal(event.Data.Raw, &invoice)
-		if err != nil {
-			return c.String(http.StatusBadRequest, "Invalid JSON")
-		}
-
-		// Vérifier si l'utilisateur est associé à cette facture et mettre à jour son abonnement
-		user, err := s.r.GetUserByStripeID(c.Request().Context(), invoice.Customer.ID)
-		if err != nil {
-			fmt.Println(err)
-			return c.String(http.StatusInternalServerError, "Error getting user")
-		}
-
-		// Exemple : Mettre à jour l'abonnement de l'utilisateur
-		err = s.r.UpdateUserSubscription(c.Request().Context(), user.ID.String(), users.Professional)
-		if err != nil {
-			fmt.Println(err)
-			return c.String(http.StatusInternalServerError, "Error updating user subscription")
-		}
-
-		return c.String(http.StatusOK, "Subscription updated")
-
+		handlerErr = s.handleInvoicePaymentSucceeded(ctx, event)
+	case "invoice.payment_failed":
+		handlerErr = s.handleInvoicePaymentFailed(ctx, event)
+	case "customer.subscription.updated":
+		handlerErr = s.handleSubscriptionUpdated(ctx, event)
+	case "customer.subscription.deleted":
+		handlerErr = s.handleSubscriptionDeleted(ctx, event)
 	case "checkout.session.completed":
-		var session stripe.CheckoutSession
-
-		err := json.Unmarshal(event.Data.Raw, &session)
-		if err != nil {
-			return c.String(http.StatusBadRequest, "Invalid JSON")
-		}
-
-		// fmt.Println("Session ID:", session)
-
-		// user, err := s.r.GetUserByStripeID(c.Request().Context(), session.Customer.ID)
-		// if err != nil {
-		// 	return c.String(http.StatusInternalServerError, "Error getting user")
-		// }
-
-		// if user.Subscription != users.Free {
-		// 	return c.String(http.StatusOK, "User already has a subscription")
-		// }
-
-		// err = s.r.UpdateUserSubscription(c.Request().Context(), user.ID.String(), users.Premium)
-		// if err != nil {
-		// 	return c.String(http.StatusInternalServerError, "Error updating user subscription")
-		// }
-
-		// return c.String(http.StatusOK, "Subscription updated")
+		handlerErr = s.handleCheckoutSessionCompleted(ctx, event)
+	default:
+		return c.NoContent(http.StatusOK)
 	}
 
-	return c.String(http.StatusOK, "Webhook received")
+	if handlerErr != nil {
+		return c.NoContent(http.StatusInternalServerError)
+	}
+
+	return c.NoContent(http.StatusOK)
 }

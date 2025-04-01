@@ -70,11 +70,15 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		Password:          hashedPassword,
 		ProfilePictureUrl: "https://api.dicebear.com/7.x/initials/svg?seed=" + string(req.FirstName[0]) + string(req.LastName[0]),
 		Country:           req.Country,
-		Subscription:      users.Free,
 		StripeCustomerID:  *stripeID,
 	}
 
 	if err := s.repo.CreateUser(ctx, newUser); err != nil {
+		return nil, err
+	}
+
+	err = s.repo.CreateInitialSubscription(ctx, newUser.StripeCustomerID)
+	if err != nil {
 		return nil, err
 	}
 

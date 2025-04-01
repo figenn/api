@@ -11,14 +11,29 @@ CREATE TABLE users (
     date_reset_password TIMESTAMP,
     profile_picture_url VARCHAR(512),
     stripe_customer_id VARCHAR(255) UNIQUE,
-    subscription VARCHAR(30),
-    bio TEXT,
     country VARCHAR(30),
+    currency VARCHAR(10) DEFAULT 'EUR',
     refresh_token VARCHAR(512),
     two_fa_enabled BOOLEAN DEFAULT FALSE,
     two_fa_code VARCHAR(10),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP 
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE user_subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    stripe_customer_id VARCHAR(255) NOT NULL REFERENCES users(stripe_customer_id) ON DELETE CASCADE,
+    stripe_subscription_id VARCHAR(255) NOT NULL,
+    stripe_price_id VARCHAR(255) NOT NULL,
+    subscription_type VARCHAR(30) NOT NULL,
+    status VARCHAR(30) NOT NULL,            
+    cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE,
+    current_period_start TIMESTAMP NOT NULL,
+    current_period_end TIMESTAMP NOT NULL,
+    canceled_at TIMESTAMP,
+    ends_at TIMESTAMP,                     
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE subscriptions (

@@ -52,7 +52,7 @@ func (s *Server) setupSubscriptionRoutes(apiGroup *echo.Group) {
 
 func (s *Server) newAuthAPI() *auth.API {
 	authRepo := auth.NewRepository(s.db.Pool())
-	paymentService := payment.NewService(os.Getenv("STRIPE_SECRET_KEY"), users.NewRepository(s.db))
+	paymentService := payment.NewService(os.Getenv("STRIPE_SECRET_KEY"), stripe.NewRepository(s.db))
 	authService := auth.NewService(authRepo, &auth.Config{
 		JWTSecret:            s.config.JWTSecret,
 		TokenDuration:        time.Minute * 30,
@@ -71,8 +71,8 @@ func (s *Server) newUserAPI() *users.API {
 }
 
 func (s *Server) newStripeAPI() *stripe.API {
-	userRepo := users.NewRepository(s.db)
-	stripeService := stripe.NewService(os.Getenv("STRIPE_SECRET_KEY"), userRepo)
+	stripeRepo := stripe.NewRepository(s.db)
+	stripeService := stripe.NewService(os.Getenv("STRIPE_SECRET_KEY"), stripeRepo)
 	return stripe.NewAPI(s.config.JWTSecret, stripeService)
 }
 
