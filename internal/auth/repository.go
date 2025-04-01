@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"figenn/internal/payment"
 	"figenn/internal/users"
 	"fmt"
 	"time"
@@ -51,8 +52,8 @@ func (r *Repository) UserExistsByEmail(ctx context.Context, email string) (bool,
 
 func (r *Repository) CreateUser(ctx context.Context, user *users.User) error {
 	query, args, err := squirrel.Insert("users").
-		Columns("email", "password", "first_name", "last_name", "profile_picture_url", "country", "subscription", "stripe_customer_id").
-		Values(user.Email, user.Password, user.FirstName, user.LastName, user.ProfilePictureUrl, user.Country, user.Subscription, user.StripeCustomerID).
+		Columns("email", "password", "first_name", "last_name", "profile_picture_url", "country", "stripe_customer_id").
+		Values(user.Email, user.Password, user.FirstName, user.LastName, user.ProfilePictureUrl, user.Country, user.StripeCustomerID).
 		Suffix("RETURNING id").
 		PlaceholderFormat(squirrel.Dollar).
 		ToSql()
@@ -69,7 +70,7 @@ func (r *Repository) CreateUser(ctx context.Context, user *users.User) error {
 }
 
 func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*users.User, error) {
-	q := squirrel.Select("id", "email", "password", "first_name", "last_name", "profile_picture_url", "country", "subscription", "stripe_customer_id").
+	q := squirrel.Select("id", "email", "password", "first_name", "last_name", "profile_picture_url", "country", "stripe_customer_id").
 		From("users").
 		Where(squirrel.Eq{"email": email}).
 		PlaceholderFormat(squirrel.Dollar)
@@ -80,7 +81,7 @@ func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*users.U
 	}
 
 	var u users.User
-	err = r.pool.QueryRow(ctx, query, args...).Scan(&u.ID, &u.Email, &u.Password, &u.FirstName, &u.LastName, &u.ProfilePictureUrl, &u.Country, &u.Subscription, &u.StripeCustomerID)
+	err = r.pool.QueryRow(ctx, query, args...).Scan(&u.ID, &u.Email, &u.Password, &u.FirstName, &u.LastName, &u.ProfilePictureUrl, &u.Country, &u.StripeCustomerID)
 	if errors.Is(err, errors.New("pgx: no rows in result")) {
 		return nil, ErrUserNotFound
 	}
@@ -237,7 +238,7 @@ func (r *Repository) VerifyRefreshToken(ctx context.Context, userId uuid.UUID, t
 }
 
 func (r *Repository) GetUserByID(ctx context.Context, id uuid.UUID) (*users.User, error) {
-	q := squirrel.Select("id", "email", "password", "first_name", "last_name", "profile_picture_url", "country", "subscription", "stripe_customer_id").
+	q := squirrel.Select("id", "email", "password", "first_name", "last_name", "profile_picture_url", "country", "stripe_customer_id").
 		From("users").
 		Where(squirrel.Eq{"id": id}).
 		PlaceholderFormat(squirrel.Dollar)
@@ -248,10 +249,42 @@ func (r *Repository) GetUserByID(ctx context.Context, id uuid.UUID) (*users.User
 	}
 
 	var u users.User
-	err = r.pool.QueryRow(ctx, query, args...).Scan(&u.ID, &u.Email, &u.Password, &u.FirstName, &u.LastName, &u.ProfilePictureUrl, &u.Country, &u.Subscription, &u.StripeCustomerID)
+	err = r.pool.QueryRow(ctx, query, args...).Scan(&u.ID, &u.Email, &u.Password, &u.FirstName, &u.LastName, &u.ProfilePictureUrl, &u.Country, &u.StripeCustomerID)
 	if errors.Is(err, errors.New("pgx: no rows in result")) {
 		return nil, ErrUserNotFound
 	}
 
 	return &u, nil
+}
+
+func (r *Repository) CreateInitialSubscription(ctx context.Context, stripeCustomerId string) error {
+	query, args, err := squirrel.Insert("user_subscriptions").
+		Columns(
+			"stripe_customer_id",
+			"subscription_type",
+			"status",
+			"stripe_price_id",
+			"stripe_subscription_id",
+			"cancel_at_period_end",
+			"current_period_start",
+			"current_period_end",
+		).
+		Values(
+			stripeCustomerId,
+			payment.Free,
+			"active",
+			"",
+			"",
+			false,
+			time.Now(),
+			time.Now().AddDate(0, 12, 0),
+		).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
+	if err != nil {
+		return err
+	}
+
+	_, err = r.pool.Exec(ctx, query, args...)
+	return err
 }
