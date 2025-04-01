@@ -6,7 +6,7 @@ services:
       target: prod
     restart: unless-stopped
     ports:
-      - ${PORT}:${PORT}
+      - "${PORT}:${PORT}"
     environment:
       APP_ENV: ${APP_ENV}
       PORT: ${PORT}
@@ -22,10 +22,10 @@ services:
     networks:
       - blueprint
     volumes:
-      - .env:/app/.env
+      - .env:/app/.env:ro
 
   postgres:
-    image: postgres:latest
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${BLUEPRINT_DB_DATABASE}
@@ -39,12 +39,11 @@ services:
       test:
         [
           "CMD-SHELL",
-          "sh -c 'pg_isready -U ${BLUEPRINT_DB_USERNAME} -d ${BLUEPRINT_DB_DATABASE}'",
+          "pg_isready -U ${BLUEPRINT_DB_USERNAME} -d ${BLUEPRINT_DB_DATABASE}",
         ]
       interval: 5s
       timeout: 5s
-      retries: 3
-      start_period: 15s
+      retries: 5
     networks:
       - blueprint
 
@@ -65,5 +64,6 @@ services:
 volumes:
   psql_volume_bp:
   mailhog_data:
+
 networks:
   blueprint:

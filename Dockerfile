@@ -22,7 +22,7 @@ COPY --from=build /go/bin/goose /usr/local/bin/goose
 COPY --from=build /app/main /app/main
 COPY --from=build /app/migrations /app/migrations
 
-EXPOSE ${PORT}
+EXPOSE 8080
 
 COPY entrypoint.sh /app/
 
