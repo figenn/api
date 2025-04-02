@@ -27,8 +27,7 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.app.rule=Host(`dev.figenn.com`)"
       - "traefik.http.routers.app.entrypoints=websecure"
-      - "traefik.http.routers.app.tls=true"
-      - "traefik.http.routers.app.tls.domains[0].main=dev.figenn.com"
+      - "traefik.http.routers.app.tls.certresolver=letsencrypt"
       - "traefik.http.services.app.loadbalancer.server.port=${PORT}"
 
   postgres:
@@ -80,12 +79,12 @@ services:
       - --entrypoints.web.http.redirections.entryPoint.to=websecure
       - --entrypoints.web.http.redirections.entryPoint.scheme=https
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:8080"
+      - "8443:8443"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./traefik/certs:/etc/traefik/certs:ro
+      - ./traefik/acme.json:/etc/traefik/acme.json
     networks:
       - blueprint
     restart: unless-stopped

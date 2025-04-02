@@ -1,4 +1,23 @@
-tls:
-  certificates:
-    - certFile: "/etc/traefik/certs/figenn.com_ssl_certificate.cer"
-      keyFile: "/etc/traefik/certs/wildcard_figenn.com.key"
+entryPoints:
+  web:
+    address: ":8080"
+  websecure:
+    address: ":8443"
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: alexandredissi@gmail.com
+      storage: /etc/traefik/acme.json
+      httpChallenge:
+        entryPoint: web
+
+providers:
+  docker:
+    exposedByDefault: false
+
+log:
+  level: INFO
+
+api:
+  dashboard: true
