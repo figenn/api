@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   app:
     build:
@@ -5,8 +7,6 @@ services:
       dockerfile: Dockerfile
       target: prod
     restart: unless-stopped
-    ports:
-      - "${PORT}:${PORT}"
     environment:
       APP_ENV: ${APP_ENV}
       PORT: ${PORT}
@@ -23,6 +23,13 @@ services:
       - blueprint
     volumes:
       - .env:/app/.env:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app.rule=Host(`dev.figenn.com`)"
+      - "traefik.http.routers.app.entrypoints=websecure"
+      - "traefik.http.routers.app.tls=true"
+      - "traefik.http.routers.app.tls.domains[0].main=dev.figenn.com"
+      - "traefik.http.services.app.loadbalancer.server.port=${PORT}"
 
   postgres:
     image: postgres:17-bullseye
@@ -60,6 +67,28 @@ services:
       MH_MAILDIR_PATH: /tmp
     volumes:
       - mailhog_data:/tmp
+
+  traefik:
+    image: traefik:v2.11
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --log.level=INFO
+      - --api.dashboard=true
+      - --entrypoints.web.http.redirections.entryPoint.to=websecure
+      - --entrypoints.web.http.redirections.entryPoint.scheme=https
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/certs:/etc/traefik/certs:ro
+    networks:
+      - blueprint
+    restart: unless-stopped
 
 volumes:
   psql_volume_bp:

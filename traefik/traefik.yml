@@ -1,0 +1,4 @@
+tls:
+  certificates:
+    - certFile: "/etc/traefik/certs/figenn.com_ssl_certificate.cer"
+      keyFile: "/etc/traefik/certs/wildcard_figenn.com.key"
