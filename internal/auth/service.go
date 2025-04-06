@@ -9,7 +9,6 @@ import (
 	"figenn/internal/payment"
 	"figenn/internal/users"
 	"figenn/internal/utils"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -211,13 +210,11 @@ func (s *Service) ForgotPassword(ctx context.Context, req ForgotPasswordRequest)
 	}
 	user, err := s.repo.FindUserByEmail(ctx, req.Email)
 	if err != nil {
-		fmt.Println("Error finding user:", err)
 		return ErrUserNotFound
 	}
 	token := generateSecureToken()
 	userID, tokenGenerated, err := s.repo.SaveResetPasswordToken(ctx, user.ID, token)
 	if err != nil {
-		fmt.Println("Error saving token:", err)
 		return ErrInternalServer
 	}
 	err = s.cache.SetWithExpire(tokenGenerated, userID, 5*time.Minute)
