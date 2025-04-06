@@ -212,7 +212,7 @@ func (a *API) DisableTOTP(c echo.Context) error {
 		}
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": err.Error()})
 	}
-	return c.NoContent(http.StatusOK)
+	return c.JSON(http.StatusOK, echo.Map{"message": "TOTP disabled"})
 }
 
 func setTokenCookies(c echo.Context, accessToken, refreshToken string, cfg Config) {
