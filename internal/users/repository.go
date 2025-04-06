@@ -22,20 +22,29 @@ func NewRepository(db database.DbService) *Repository {
 func (r *Repository) GetUser(ctx context.Context, id string) (*UserRequest, error) {
 	var u UserRequest
 
-	builder, args, err := squirrel.Select(
-		"users.id",
-		"users.email",
-		"users.first_name",
-		"users.last_name",
-		"users.profile_picture_url",
-		"users.country",
-		"users.created_at",
-		"users.stripe_customer_id",
-		"us.subscription_type",
-		"us.status").
-		From("users").
-		LeftJoin("user_subscriptions AS us ON users.stripe_customer_id = us.stripe_customer_id").
-		Where(squirrel.Eq{"users.id": id}).
+	builder, args, err := squirrel.
+		Select(
+			"u.id",
+			"u.email",
+			"u.first_name",
+			"u.last_name",
+			"u.profile_picture_url",
+			"u.country",
+			"u.created_at",
+			"u.stripe_customer_id",
+			"u.two_fa_enabled",
+			"us.subscription_type",
+			"us.status").
+		From("users AS u").
+		InnerJoin(`
+		(
+			SELECT stripe_customer_id, subscription_type, status
+			FROM user_subscriptions
+			WHERE status = 'active'
+			ORDER BY updated_at DESC
+			LIMIT 1
+		) AS us ON u.stripe_customer_id = us.stripe_customer_id`).
+		Where(squirrel.Eq{"u.id": id}).
 		PlaceholderFormat(squirrel.Dollar).
 		ToSql()
 
@@ -52,6 +61,7 @@ func (r *Repository) GetUser(ctx context.Context, id string) (*UserRequest, erro
 		&u.Country,
 		&u.CreatedAt,
 		&u.StripeCustomerID,
+		&u.TwoFAEnabled,
 		&u.SubscriptionType,
 		&u.Status,
 	)

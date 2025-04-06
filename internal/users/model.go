@@ -38,4 +38,5 @@ type UserRequest struct {
 	StripeCustomerID  string    `json:"stripe_customer_id,omitempty" form:"stripe_customer_id"`
 	SubscriptionType  string    `json:"subscription_type,omitempty" form:"subscription_type"`
 	Status            string    `json:"status,omitempty" form:"status"`
+	TwoFAEnabled      bool      `json:"two_fa_enabled" form:"two_fa_enabled"`
 }
