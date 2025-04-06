@@ -15,7 +15,7 @@ CREATE TABLE users (
     currency VARCHAR(10) DEFAULT 'EUR',
     refresh_token VARCHAR(512),
     two_fa_enabled BOOLEAN DEFAULT FALSE,
-    two_fa_code VARCHAR(10),
+    two_fa_secret VARCHAR(64),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

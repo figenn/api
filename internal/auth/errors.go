@@ -15,4 +15,7 @@ var (
 	ErrTokenExpired       = errors.New("token expired")
 	ErrInvalidToken       = errors.New("invalid token")
 	ErrInvalidFormat      = errors.New("invalid format")
+	ErrInvalidTOTPCode    = errors.New("invalid TOTP code")
+	ErrTOTPAlreadyEnabled = errors.New("TOTP is already enabled")
+	ErrTOTPNotEnabled     = errors.New("TOTP is not enabled")
 )

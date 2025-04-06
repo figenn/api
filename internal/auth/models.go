@@ -50,3 +50,12 @@ type ResetPasswordRequest struct {
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
+
+type TOTPRequest struct {
+	Code string `json:"code" form:"code"  validate:"required"`
+}
+
+type TOTPSecretResponse struct {
+	Secret string `json:"secret" form:"secret"`
+	QR     string `json:"qr" form:"qr"`
+}

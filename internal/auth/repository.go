@@ -5,29 +5,14 @@ import (
 	"errors"
 	"figenn/internal/payment"
 	"figenn/internal/users"
-	"fmt"
 	"time"
 
 	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-type UserRepository interface {
-	CreateUser(ctx context.Context, user *users.User) error
-	GetUser(ctx context.Context, cond squirrel.Sqlizer) (*users.User, error)
-	UserExists(ctx context.Context, cond squirrel.Sqlizer) (bool, error)
-	SaveRefreshToken(ctx context.Context, userID uuid.UUID, refreshToken string) error
-	VerifyRefreshToken(ctx context.Context, userID uuid.UUID, refreshToken string) (bool, error)
-	InvalidateRefreshToken(ctx context.Context, userID uuid.UUID, refreshToken string) error
-	SavePasswordResetToken(ctx context.Context, userID uuid.UUID, token string) (uuid.UUID, string, error)
-	ValidateResetToken(ctx context.Context, token string) error
-	GetUserIDByResetToken(ctx context.Context, token string) (uuid.UUID, bool, error)
-	ResetPassword(ctx context.Context, userID uuid.UUID, hashedPassword string) error
-	ClearResetToken(ctx context.Context, userID uuid.UUID) error
-}
 
 type Repository struct {
 	pool *pgxpool.Pool
@@ -39,11 +24,11 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	}
 }
 
-func (r *Repository) UserExistsByEmail(ctx context.Context, email string) (bool, error) {
+func (r *Repository) CheckUserEmailExists(ctx context.Context, email string) (bool, error) {
 	q := squirrel.Select("COUNT(*)").From("users").Where(squirrel.Eq{"email": email}).PlaceholderFormat(squirrel.Dollar)
 	query, args, err := q.ToSql()
 	if err != nil {
-		return false, errors.New("failed to build select query")
+		return false, err
 	}
 	var count int
 	err = r.pool.QueryRow(ctx, query, args...).Scan(&count)
@@ -59,17 +44,13 @@ func (r *Repository) CreateUser(ctx context.Context, user *users.User) error {
 		ToSql()
 
 	if err != nil {
-		return errors.New("failed to build insert query")
-	}
-
-	if err := r.pool.QueryRow(ctx, query, args...).Scan(&user.ID); err != nil {
 		return err
 	}
 
-	return nil
+	return r.pool.QueryRow(ctx, query, args...).Scan(&user.ID)
 }
 
-func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*users.User, error) {
+func (r *Repository) FindUserByEmail(ctx context.Context, email string) (*users.User, error) {
 	q := squirrel.Select("id", "email", "password", "first_name", "last_name", "profile_picture_url", "country", "stripe_customer_id").
 		From("users").
 		Where(squirrel.Eq{"email": email}).
@@ -77,19 +58,19 @@ func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*users.U
 
 	query, args, err := q.ToSql()
 	if err != nil {
-		return nil, errors.New("failed to build select query")
+		return nil, err
 	}
 
 	var u users.User
 	err = r.pool.QueryRow(ctx, query, args...).Scan(&u.ID, &u.Email, &u.Password, &u.FirstName, &u.LastName, &u.ProfilePictureUrl, &u.Country, &u.StripeCustomerID)
-	if errors.Is(err, errors.New("pgx: no rows in result")) {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}
 
-	return &u, nil
+	return &u, err
 }
 
-func (r *Repository) SavePasswordResetToken(ctx context.Context, id uuid.UUID, token string) (uuid.UUID, string, error) {
+func (r *Repository) SaveResetPasswordToken(ctx context.Context, id uuid.UUID, token string) (uuid.UUID, string, error) {
 	q := squirrel.Update("users").
 		Set("reset_password_token", token).
 		Set("is_resetting_password", true).
@@ -100,7 +81,7 @@ func (r *Repository) SavePasswordResetToken(ctx context.Context, id uuid.UUID, t
 
 	query, args, err := q.ToSql()
 	if err != nil {
-		return uuid.Nil, "", errors.New("failed to build update query")
+		return uuid.Nil, "", err
 	}
 
 	var returnedID uuid.UUID
@@ -109,9 +90,8 @@ func (r *Repository) SavePasswordResetToken(ctx context.Context, id uuid.UUID, t
 	return returnedID, returnedToken, err
 }
 
-func (r *Repository) IsValidResetToken(ctx context.Context, token string) (bool, error) {
-	q := squirrel.
-		Select("1").
+func (r *Repository) IsResetTokenValid(ctx context.Context, token string) (bool, error) {
+	q := squirrel.Select("1").
 		From("users").
 		Where(squirrel.Eq{"reset_password_token": token}).
 		Limit(1).
@@ -124,44 +104,34 @@ func (r *Repository) IsValidResetToken(ctx context.Context, token string) (bool,
 
 	var exists int
 	err = r.pool.QueryRow(ctx, query, args...).Scan(&exists)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return false, nil
-		}
-		return false, err
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
 	}
-
-	return true, nil
+	return true, err
 }
 
-func (r *Repository) GetUserIDByResetToken(ctx context.Context, token string) (uuid.UUID, *string, bool, error) {
+func (r *Repository) FindUserIDByResetToken(ctx context.Context, token string) (uuid.UUID, *string, bool, error) {
 	q := squirrel.Select("id", "email", "date_reset_password").
 		From("users").
-		Where(squirrel.Eq{"reset_password_token": token}).
-		Where(squirrel.Eq{"is_resetting_password": true}).
+		Where(squirrel.Eq{"reset_password_token": token, "is_resetting_password": true}).
 		PlaceholderFormat(squirrel.Dollar)
 
 	query, args, err := q.ToSql()
 	if err != nil {
-		return uuid.Nil, nil, false, errors.New("failed to build select query")
+		return uuid.Nil, nil, false, err
 	}
 
 	var userID uuid.UUID
 	var email *string
-	var dateResetPassword time.Time
-	err = r.pool.QueryRow(ctx, query, args...).Scan(&userID, &email, &dateResetPassword)
-	if err != nil {
-		if errors.Is(err, errors.New("pgx: no rows in result")) {
-			return uuid.Nil, nil, false, nil
-		}
-		return uuid.Nil, nil, false, err
-	}
-
-	if time.Since(dateResetPassword) > 24*time.Hour {
+	var dateReset time.Time
+	err = r.pool.QueryRow(ctx, query, args...).Scan(&userID, &email, &dateReset)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, nil, false, nil
 	}
-
-	return userID, email, true, nil
+	if time.Since(dateReset) > 24*time.Hour {
+		return uuid.Nil, nil, false, nil
+	}
+	return userID, email, true, err
 }
 
 func (r *Repository) ClearResetToken(ctx context.Context, userID uuid.UUID) error {
@@ -174,36 +144,35 @@ func (r *Repository) ClearResetToken(ctx context.Context, userID uuid.UUID) erro
 
 	query, args, err := q.ToSql()
 	if err != nil {
-		return errors.New("failed to build update query")
+		return err
 	}
 
 	_, err = r.pool.Exec(ctx, query, args...)
 	return err
 }
 
-func (r *Repository) ResetPassword(ctx context.Context, userID uuid.UUID, hashedPassword string) error {
+func (r *Repository) UpdateUserPassword(ctx context.Context, userID uuid.UUID, hashed string) error {
 	q := squirrel.Update("users").
-		Set("password", hashedPassword).
+		Set("password", hashed).
 		Where(squirrel.Eq{"id": userID}).
 		PlaceholderFormat(squirrel.Dollar)
 
 	query, args, err := q.ToSql()
 	if err != nil {
-		return errors.New("failed to build update query")
+		return err
 	}
 
-	result, err := r.pool.Exec(ctx, query, args...)
+	rst, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
 		return err
 	}
-	rowsAffected := result.RowsAffected()
-	if rowsAffected == 0 {
+	if rst.RowsAffected() == 0 {
 		return ErrUserNotFound
 	}
 	return nil
 }
 
-func (r *Repository) SaveRefreshToken(ctx context.Context, userID uuid.UUID, token string) error {
+func (r *Repository) StoreRefreshToken(ctx context.Context, userID uuid.UUID, token string) error {
 	q := squirrel.Update("users").
 		Set("refresh_token", token).
 		Where(squirrel.Eq{"id": userID}).
@@ -211,30 +180,29 @@ func (r *Repository) SaveRefreshToken(ctx context.Context, userID uuid.UUID, tok
 
 	query, args, err := q.ToSql()
 	if err != nil {
-		return errors.New("failed to build update query")
+		return err
 	}
-
 	_, err = r.pool.Exec(ctx, query, args...)
-	fmt.Println("SaveRefreshToken", err)
 	return err
 }
 
-func (r *Repository) VerifyRefreshToken(ctx context.Context, userId uuid.UUID, token string) (bool, error) {
-	q := squirrel.Select("id").From("users").
-		Where(squirrel.Eq{"id": userId, "refresh_token": token}).
+func (r *Repository) CheckRefreshToken(ctx context.Context, userID uuid.UUID, token string) (bool, error) {
+	q := squirrel.Select("1").From("users").
+		Where(squirrel.Eq{"id": userID, "refresh_token": token}).
+		Limit(1).
 		PlaceholderFormat(squirrel.Dollar)
 
 	query, args, err := q.ToSql()
 	if err != nil {
-		return false, errors.New("failed to build select query")
+		return false, err
 	}
 
-	var id uuid.UUID
-	err = r.pool.QueryRow(ctx, query, args...).Scan(&id)
-	if errors.Is(err, errors.New("pgx: no rows in result")) {
+	var exists int
+	err = r.pool.QueryRow(ctx, query, args...).Scan(&exists)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
-	return true, nil
+	return true, err
 }
 
 func (r *Repository) GetUserByID(ctx context.Context, id uuid.UUID) (*users.User, error) {
@@ -245,46 +213,79 @@ func (r *Repository) GetUserByID(ctx context.Context, id uuid.UUID) (*users.User
 
 	query, args, err := q.ToSql()
 	if err != nil {
-		return nil, errors.New("failed to build select query")
+		return nil, err
 	}
 
 	var u users.User
 	err = r.pool.QueryRow(ctx, query, args...).Scan(&u.ID, &u.Email, &u.Password, &u.FirstName, &u.LastName, &u.ProfilePictureUrl, &u.Country, &u.StripeCustomerID)
-	if errors.Is(err, errors.New("pgx: no rows in result")) {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}
-
-	return &u, nil
+	return &u, err
 }
 
-func (r *Repository) CreateInitialSubscription(ctx context.Context, stripeCustomerId string) error {
-	query, args, err := squirrel.Insert("user_subscriptions").
-		Columns(
-			"stripe_customer_id",
-			"subscription_type",
-			"status",
-			"stripe_price_id",
-			"stripe_subscription_id",
-			"cancel_at_period_end",
-			"current_period_start",
-			"current_period_end",
-		).
-		Values(
-			stripeCustomerId,
-			payment.Free,
-			"active",
-			"",
-			"",
-			false,
-			time.Now(),
-			time.Now().AddDate(0, 12, 0),
-		).
-		PlaceholderFormat(squirrel.Dollar).
-		ToSql()
+func (r *Repository) InitDefaultSubscription(ctx context.Context, stripeCustomerID string) error {
+	q := squirrel.Insert("user_subscriptions").
+		Columns("stripe_customer_id", "subscription_type", "status", "stripe_price_id", "stripe_subscription_id", "cancel_at_period_end", "current_period_start", "current_period_end").
+		Values(stripeCustomerID, payment.Free, "active", "", "", false, time.Now(), time.Now().AddDate(0, 12, 0)).
+		PlaceholderFormat(squirrel.Dollar)
+
+	query, args, err := q.ToSql()
 	if err != nil {
 		return err
 	}
+	_, err = r.pool.Exec(ctx, query, args...)
+	return err
+}
 
+func (r *Repository) StoreTOTPSecret(ctx context.Context, userID uuid.UUID, secret string) error {
+	q := squirrel.Update("users").
+		Set("two_fa_secret", secret).
+		Where(squirrel.Eq{"id": userID}).
+		PlaceholderFormat(squirrel.Dollar)
+
+	query, args, err := q.ToSql()
+	if err != nil {
+		return err
+	}
+	_, err = r.pool.Exec(ctx, query, args...)
+	return err
+}
+
+func (r *Repository) RetrieveTOTPSecret(ctx context.Context, userID uuid.UUID) (string, error) {
+	q := squirrel.Select("two_fa_secret").From("users").Where(squirrel.Eq{"id": userID}).PlaceholderFormat(squirrel.Dollar)
+	query, args, err := q.ToSql()
+	if err != nil {
+		return "", err
+	}
+	var secret string
+	err = r.pool.QueryRow(ctx, query, args...).Scan(&secret)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return secret, err
+}
+
+func (r *Repository) EnableTOTP(ctx context.Context, userID uuid.UUID) error {
+	q := squirrel.Update("users").Set("two_fa_enabled", true).Where(squirrel.Eq{"id": userID}).PlaceholderFormat(squirrel.Dollar)
+	query, args, err := q.ToSql()
+	if err != nil {
+		return err
+	}
+	_, err = r.pool.Exec(ctx, query, args...)
+	return err
+}
+
+func (r *Repository) DisableTOTP(ctx context.Context, userID uuid.UUID) error {
+	q := squirrel.Update("users").
+		Set("two_fa_secret", nil).
+		Set("two_fa_enabled", false).
+		Where(squirrel.Eq{"id": userID}).
+		PlaceholderFormat(squirrel.Dollar)
+	query, args, err := q.ToSql()
+	if err != nil {
+		return err
+	}
 	_, err = r.pool.Exec(ctx, query, args...)
 	return err
 }

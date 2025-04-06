@@ -61,7 +61,7 @@ func (s *Server) newAuthAPI() *auth.API {
 		Environment:          os.Getenv("APP_ENV"),
 	}, mailer.NewMailer(), paymentService)
 
-	return auth.NewAPI(authService)
+	return auth.NewAPI(authService, s.config.JWTSecret)
 }
 
 func (s *Server) newUserAPI() *users.API {
