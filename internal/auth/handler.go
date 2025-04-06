@@ -31,7 +31,7 @@ func (a *API) Bind(rg *echo.Group) {
 	authGroup.POST("/reset-password", a.ResetPassword)
 	authGroup.GET("/logout", a.Logout)
 	authGroup.POST("/refresh", a.RefreshToken)
-	authGroup.GET("/enable-totp", a.EnableTOTP, users.CookieAuthMiddleware(a.service.config.JWTSecret))
+	authGroup.POST("/enable-totp", a.EnableTOTP, users.CookieAuthMiddleware(a.service.config.JWTSecret))
 	authGroup.POST("/disable-totp", a.DisableTOTP, users.CookieAuthMiddleware(a.service.config.JWTSecret))
 	authGroup.POST("/verify-totp", a.VerifyTOTP, users.CookieAuthMiddleware(a.service.config.JWTSecret))
 }
