@@ -82,6 +82,10 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		return nil, err
 	}
 
+	if utils.ValidateCurrency(req.Currency) != true {
+		return nil, ErrInvalidCurrency
+	}
+
 	newUser := &users.User{
 		Email:             req.Email,
 		FirstName:         req.FirstName,
@@ -90,6 +94,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		ProfilePictureUrl: "https://api.dicebear.com/7.x/initials/svg?seed=" + string(req.FirstName[0]) + string(req.LastName[0]),
 		Country:           req.Country,
 		StripeCustomerID:  *stripeID,
+		Currency:          req.Currency,
 	}
 
 	if err := s.repo.CreateUser(ctx, newUser); err != nil {

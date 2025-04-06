@@ -37,8 +37,8 @@ func (r *Repository) CheckUserEmailExists(ctx context.Context, email string) (bo
 
 func (r *Repository) CreateUser(ctx context.Context, user *users.User) error {
 	query, args, err := squirrel.Insert("users").
-		Columns("email", "password", "first_name", "last_name", "profile_picture_url", "country", "stripe_customer_id").
-		Values(user.Email, user.Password, user.FirstName, user.LastName, user.ProfilePictureUrl, user.Country, user.StripeCustomerID).
+		Columns("email", "password", "first_name", "last_name", "profile_picture_url", "country", "stripe_customer_id", "currency").
+		Values(user.Email, user.Password, user.FirstName, user.LastName, user.ProfilePictureUrl, user.Country, user.StripeCustomerID, user.Currency).
 		Suffix("RETURNING id").
 		PlaceholderFormat(squirrel.Dollar).
 		ToSql()

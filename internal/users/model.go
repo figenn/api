@@ -20,6 +20,7 @@ type User struct {
 	StripeCustomerID    string     `json:"stripe_customer_id,omitempty" form:"stripe_customer_id"`
 	Bio                 string     `json:"bio,omitempty" form:"bio"`
 	Country             string     `json:"country,omitempty" form:"country"`
+	Currency            string     `json:"currency,omitempty" form:"currency"`
 	LastLogin           *time.Time `json:"last_login,omitempty" form:"last_login"`
 	TwoFAEnabled        bool       `json:"two_fa_enabled" form:"two_fa_enabled"`
 	TwoFACode           string     `json:"two_fa_code,omitempty" form:"two_fa_code"`

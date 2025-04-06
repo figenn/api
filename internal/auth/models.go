@@ -8,6 +8,7 @@ type RegisterRequest struct {
 	Email     string `json:"email" form:"email"`
 	Password  string `json:"password" form:"password"`
 	Country   string `json:"country" form:"country"`
+	Currency  string `json:"currency" form:"currency"`
 }
 
 func (r RegisterRequest) Validate() error {

@@ -50,7 +50,7 @@ func (a *API) Register(c echo.Context) error {
 		switch {
 		case errors.Is(err, ErrUserExists):
 			return c.JSON(http.StatusConflict, echo.Map{"error": err.Error()})
-		case errors.Is(err, ErrInvalidEmail), errors.Is(err, ErrPasswordTooWeak), errors.Is(err, ErrMissingFields):
+		case errors.Is(err, ErrInvalidEmail), errors.Is(err, ErrPasswordTooWeak), errors.Is(err, ErrMissingFields), errors.Is(err, ErrInvalidCurrency):
 			return c.JSON(http.StatusUnprocessableEntity, echo.Map{"error": err.Error()})
 		default:
 			return c.JSON(http.StatusInternalServerError, echo.Map{"error": ErrInternalServer.Error()})

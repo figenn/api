@@ -18,4 +18,5 @@ var (
 	ErrInvalidTOTPCode    = errors.New("invalid TOTP code")
 	ErrTOTPAlreadyEnabled = errors.New("TOTP is already enabled")
 	ErrTOTPNotEnabled     = errors.New("TOTP is not enabled")
+	ErrInvalidCurrency    = errors.New("invalid currency (must be a valid ISO 4217 currency code)")
 )
