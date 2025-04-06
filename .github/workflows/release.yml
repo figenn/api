@@ -1,29 +1,26 @@
-name: goreleaser
+name: Deploy to VPS
 
 on:
   push:
-    tags:
-      - "v*.*.*"
-
-permissions:
-  contents: write
+    branches:
+      - main
 
 jobs:
-  goreleaser:
+  deploy:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.22.x'
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
         with:
-          distribution: goreleaser
-          version: ${{ env.GITHUB_REF_NAME }}
-          args: release --clean
-          workdir: ./
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /home/figenn/app
+            git reset --hard
+            git pull origin main
+            chmod +x entrypoint.sh migrate.sh
+            ./migrate.sh
+            docker compose build
+            docker compose up -d
