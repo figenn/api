@@ -37,6 +37,7 @@ func (a *API) Bind(rg *echo.Group) {
 }
 
 func (a *API) Register(c echo.Context) error {
+	ctx := c.Request().Context()
 	var req RegisterRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": ErrInvalidFormat.Error()})
@@ -44,7 +45,7 @@ func (a *API) Register(c echo.Context) error {
 	if err := req.Validate(); err != nil {
 		return c.JSON(http.StatusUnprocessableEntity, echo.Map{"error": err.Error()})
 	}
-	resp, err := a.service.Register(c.Request().Context(), req)
+	resp, err := a.service.Register(ctx, req)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrUserExists):
@@ -59,11 +60,12 @@ func (a *API) Register(c echo.Context) error {
 }
 
 func (a *API) Login(c echo.Context) error {
+	ctx := c.Request().Context()
 	var req LoginRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Request format is invalid"})
 	}
-	accessToken, refreshToken, err := a.service.Login(c.Request().Context(), req, c.Response().Writer)
+	accessToken, refreshToken, err := a.service.Login(ctx, req, c.Response().Writer)
 	if err != nil {
 		return c.JSON(http.StatusUnauthorized, echo.Map{"error": err.Error()})
 	}
@@ -72,6 +74,7 @@ func (a *API) Login(c echo.Context) error {
 }
 
 func (a *API) ForgotPassword(c echo.Context) error {
+	ctx := c.Request().Context()
 	var req ForgotPasswordRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Request format is invalid"})
@@ -79,7 +82,7 @@ func (a *API) ForgotPassword(c echo.Context) error {
 	if req.Email == "" {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": ErrMissingFields.Error()})
 	}
-	err := a.service.ForgotPassword(c.Request().Context(), req)
+	err := a.service.ForgotPassword(ctx, req)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrUserNotFound):
@@ -92,11 +95,12 @@ func (a *API) ForgotPassword(c echo.Context) error {
 }
 
 func (a *API) ValidateResetToken(c echo.Context) error {
+	ctx := c.Request().Context()
 	token := c.QueryParam("token")
 	if token == "" {
 		return c.JSON(http.StatusOK, echo.Map{"valid": false})
 	}
-	valid, err := a.service.IsValidResetToken(c.Request().Context(), token)
+	valid, err := a.service.IsValidResetToken(ctx, token)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": ErrInternalServer.Error()})
 	}
@@ -109,6 +113,7 @@ func (a *API) ValidateResetToken(c echo.Context) error {
 }
 
 func (a *API) ResetPassword(c echo.Context) error {
+	ctx := c.Request().Context()
 	var req ResetPasswordRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Request format is invalid"})
@@ -116,7 +121,7 @@ func (a *API) ResetPassword(c echo.Context) error {
 	if req.Token == "" || req.Password == "" {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": ErrMissingFields.Error()})
 	}
-	err := a.service.ResetPassword(c.Request().Context(), req)
+	err := a.service.ResetPassword(ctx, req)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrTokenExpired), errors.Is(err, ErrInvalidToken):
@@ -134,11 +139,12 @@ func (a *API) Logout(c echo.Context) error {
 }
 
 func (a *API) RefreshToken(c echo.Context) error {
+	ctx := c.Request().Context()
 	refreshCookie, err := c.Cookie("refreshToken")
 	if err != nil || refreshCookie.Value == "" {
 		return c.JSON(http.StatusUnauthorized, echo.Map{"error": ErrInvalidToken.Error()})
 	}
-	accessToken, refreshToken, err := a.service.RefreshToken(c.Request().Context(), refreshCookie.Value)
+	accessToken, refreshToken, err := a.service.RefreshToken(ctx, refreshCookie.Value)
 	if err != nil {
 		return c.JSON(http.StatusUnauthorized, echo.Map{"error": err.Error()})
 	}
@@ -164,6 +170,7 @@ func (a *API) EnableTOTP(c echo.Context) error {
 }
 
 func (a *API) VerifyTOTP(c echo.Context) error {
+	ctx := c.Request().Context()
 	userIDStr, ok := c.Get("user_id").(string)
 	if !ok || userIDStr == "" {
 		return c.JSON(http.StatusUnauthorized, echo.Map{"error": "Missing user_id in context"})
@@ -176,7 +183,7 @@ func (a *API) VerifyTOTP(c echo.Context) error {
 	if err := c.Bind(&req); err != nil || req.Code == "" {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid TOTP payload"})
 	}
-	if err := a.service.EnableTOTP(c.Request().Context(), userID, req.Code); err != nil {
+	if err := a.service.EnableTOTP(ctx, userID, req.Code); err != nil {
 		if errors.Is(err, ErrInvalidTOTPCode) {
 			return c.JSON(http.StatusUnauthorized, echo.Map{"error": err.Error()})
 		}
@@ -186,6 +193,7 @@ func (a *API) VerifyTOTP(c echo.Context) error {
 }
 
 func (a *API) DisableTOTP(c echo.Context) error {
+	ctx := c.Request().Context()
 	userIDStr, ok := c.Get("user_id").(string)
 	if !ok || userIDStr == "" {
 		return c.JSON(http.StatusUnauthorized, echo.Map{"error": "Missing user_id in context"})
@@ -198,7 +206,7 @@ func (a *API) DisableTOTP(c echo.Context) error {
 	if err := c.Bind(&req); err != nil || req.Code == "" {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid TOTP payload"})
 	}
-	if err := a.service.DisableTOTP(c.Request().Context(), userID, req.Code); err != nil {
+	if err := a.service.DisableTOTP(ctx, userID, req.Code); err != nil {
 		if errors.Is(err, ErrInvalidTOTPCode) {
 			return c.JSON(http.StatusUnauthorized, echo.Map{"error": err.Error()})
 		}
