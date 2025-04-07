@@ -17,10 +17,13 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            set -euo pipefail
             cd /home/figenn/app
             git reset --hard
             git pull origin main
             chmod +x entrypoint.sh migrate.sh
+            export $(cat .env | grep -v '^#' | xargs)  # charge les vars env
             ./migrate.sh
+            docker system prune -af --volumes
             docker compose build
             docker compose up -d
