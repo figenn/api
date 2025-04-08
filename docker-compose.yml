@@ -25,7 +25,7 @@ services:
       - "traefik.http.routers.api.rule=Host(`api.figenn.com`)"
       - "traefik.http.routers.api.entrypoints=websecure"
       - "traefik.http.routers.api.tls.certresolver=letsencrypt"
-      - "traefik.http.services.api.loadbalancer.server.port=${PORT}"
+      - "traefik.http.services.myapp.loadbalancer.server.port=${PORT}"
     networks:
       - traefik
 
@@ -58,6 +58,11 @@ services:
       - "traefik.http.routers.api.entrypoints=websecure"
       - "traefik.http.routers.api.tls.certresolver=letsencrypt"
       - "traefik.http.services.api.loadbalancer.server.port=${PORT}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT}/health"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
 
   postgres:
     image: postgres:17-bullseye
