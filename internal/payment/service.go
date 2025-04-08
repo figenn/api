@@ -72,8 +72,8 @@ func (s *Service) CreateCheckoutSession(req *CheckoutSessionParams) (*stripe.Che
 			Quantity: stripe.Int64(1),
 		}},
 		Mode:       stripe.String(string(stripe.CheckoutSessionModeSubscription)),
-		SuccessURL: stripe.String(s.appUrl + "/dashboard?payout=success"),
-		CancelURL:  stripe.String(s.appUrl + "/dashboard?payout=cancel"),
+		SuccessURL: stripe.String(s.appUrl + "/payment?success=true"),
+		CancelURL:  stripe.String(s.appUrl + "/payment?success=false"),
 	}
 
 	if req.CustomerId != "" {
