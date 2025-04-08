@@ -1,6 +1,7 @@
 package users
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -24,6 +25,7 @@ func (a *API) Bind(rg *echo.Group) {
 }
 
 func (a *API) Me(c echo.Context) error {
+	fmt.Println("Me called")
 	ctx := c.Request().Context()
 	userId := c.Get("user_id").(string)
 
