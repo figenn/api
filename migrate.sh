@@ -1,5 +1,8 @@
 #!/bin/bash
-set -euo pipefail
+# Charger les variables depuis le fichier .env s'il existe
+if [ -f .env ]; then
+  export $(grep -v '^#' .env | xargs)
+fi
 
 DB_USER=${BLUEPRINT_DB_USERNAME:?Missing DB username}
 DB_PASSWORD=${BLUEPRINT_DB_PASSWORD:?Missing DB password}

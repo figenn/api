@@ -1,40 +1,12 @@
 services:
-  traefik:
-    image: traefik:v3.0
-    container_name: traefik
-    restart: unless-stopped
-    command:
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
-      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-      - "--certificatesresolvers.letsencrypt.acme.email=contact@figenn.com"
-      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-      - "traefik.http.services.api.loadbalancer.healthcheck.path=/health"
-      - "traefik.http.services.api.loadbalancer.healthcheck.interval=10s"
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "letsencrypt:/letsencrypt"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.api.rule=Host(`api.figenn.com`)"
-      - "traefik.http.routers.api.entrypoints=websecure"
-      - "traefik.http.routers.api.tls.certresolver=letsencrypt"
-      - "traefik.http.services.myapp.loadbalancer.server.port=${PORT}"
-    networks:
-      - traefik
-
   app:
     build:
       context: .
       dockerfile: Dockerfile
       target: prod
     restart: unless-stopped
+    ports:
+      - "${PORT}:${PORT}"
     environment:
       APP_ENV: ${APP_ENV}
       PORT: ${PORT}
@@ -49,23 +21,11 @@ services:
         condition: service_healthy
     networks:
       - blueprint
-      - traefik
     volumes:
       - .env:/app/.env:ro
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.api.rule=Host(`api.figenn.com`)"
-      - "traefik.http.routers.api.entrypoints=websecure"
-      - "traefik.http.routers.api.tls.certresolver=letsencrypt"
-      - "traefik.http.services.api.loadbalancer.server.port=${PORT}"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${PORT}/api/health"]
-      interval: 5s
-      timeout: 2s
-      retries: 5
 
   postgres:
-    image: postgres:17-bullseye
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${BLUEPRINT_DB_DATABASE}
@@ -87,26 +47,8 @@ services:
     networks:
       - blueprint
 
-  mailhog:
-    image: mailhog/mailhog:latest
-    restart: unless-stopped
-    ports:
-      - "1025:1025"
-      - "8025:8025"
-    networks:
-      - blueprint
-    environment:
-      MH_STORAGE: maildir
-      MH_MAILDIR_PATH: /tmp
-    volumes:
-      - mailhog_data:/tmp
-
 volumes:
   psql_volume_bp:
-  mailhog_data:
-  letsencrypt:
 
 networks:
   blueprint:
-  traefik:
-    external: true
