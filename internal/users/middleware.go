@@ -46,3 +46,29 @@ func CookieAuthMiddleware(secret string) echo.MiddlewareFunc {
 		}
 	}
 }
+
+func PremiumMiddleware(s *Service) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			userID := c.Get("user_id")
+			if userID == nil {
+				return echo.NewHTTPError(http.StatusUnauthorized, "Unauthorized")
+			}
+
+			user, err := s.repo.GetUser(c.Request().Context(), userID.(string))
+			if err != nil {
+				return echo.NewHTTPError(http.StatusUnauthorized, "User not found")
+			}
+
+			ok, err := s.IsPremiumUser(user.StripeCustomerID)
+			if err != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, "Unable to check subscription")
+			}
+			if !ok {
+				return echo.NewHTTPError(http.StatusForbidden, "Access restricted to premium users")
+			}
+
+			return next(c)
+		}
+	}
+}

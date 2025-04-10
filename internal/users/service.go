@@ -20,7 +20,8 @@ func NewService(repo *Repository) *Service {
 }
 
 func (s *Service) GetUserInfos(ctx context.Context, id string) (*UserRequest, error) {
-	if cached, err := s.cache.Get(id); err == nil {
+	cached, err := s.cache.Get(id)
+	if err == nil {
 		if user, ok := cached.(*UserRequest); ok {
 			return user, nil
 		}
@@ -37,4 +38,12 @@ func (s *Service) GetUserInfos(ctx context.Context, id string) (*UserRequest, er
 	}
 
 	return user, nil
+}
+
+func (s *Service) IsPremiumUser(stripeCustomerID string) (bool, error) {
+	sub, err := s.repo.GetActiveSubscriptionByCustomerID(stripeCustomerID)
+	if err != nil {
+		return false, err
+	}
+	return sub.SubscriptionType == "pro" || sub.SubscriptionType == "premium", nil
 }

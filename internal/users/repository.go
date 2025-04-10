@@ -75,3 +75,74 @@ func (r *Repository) GetUser(ctx context.Context, id string) (*UserRequest, erro
 
 	return &u, nil
 }
+
+func (r *Repository) GetUserByEmail(email string) (*User, error) {
+	query, args, err := squirrel.
+		Select("*").
+		From("users").
+		Where(squirrel.Eq{"email": email}).
+		Limit(1).
+		ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	var user User
+	err = r.s.Pool().QueryRow(context.Background(), query, args...).Scan(
+		&user.ID,
+		&user.FirstName,
+		&user.LastName,
+		&user.Email,
+		&user.Username,
+		&user.Password,
+		&user.IsResettingPassword,
+		&user.ResetPasswordToken,
+		&user.DateResetPassword,
+		&user.ProfilePictureUrl,
+		&user.StripeCustomerID,
+		&user.Bio,
+		&user.Country,
+		&user.Currency,
+		&user.LastLogin,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+func (r *Repository) GetActiveSubscriptionByCustomerID(stripeCustomerID string) (*UserSubscription, error) {
+	query, args, err := squirrel.
+		Select(
+			"id", "stripe_customer_id", "stripe_subscription_id", "stripe_price_id",
+			"subscription_type", "status", "cancel_at_period_end",
+			"current_period_start", "current_period_end",
+			"canceled_at", "ends_at", "created_at", "updated_at",
+		).
+		From("user_subscriptions").
+		Where(squirrel.Eq{
+			"stripe_customer_id": stripeCustomerID,
+			"status":             "active",
+		}).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	var sub UserSubscription
+	err = r.s.Pool().QueryRow(context.Background(), query, args...).Scan(
+		&sub.ID,
+		&sub.StripeSubscriptionID,
+		&sub.StripePriceID,
+		&sub.SubscriptionType,
+		&sub.Status,
+		&sub.CurrentPeriodEnd,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sub, nil
+}

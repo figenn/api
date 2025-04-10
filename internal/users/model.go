@@ -41,3 +41,12 @@ type UserRequest struct {
 	Status            string    `json:"status,omitempty" form:"status"`
 	TwoFAEnabled      bool      `json:"two_fa_enabled" form:"two_fa_enabled"`
 }
+
+type UserSubscription struct {
+	ID                   uuid.UUID
+	StripeSubscriptionID string
+	StripePriceID        string
+	SubscriptionType     string
+	Status               string
+	CurrentPeriodEnd     time.Time
+}
