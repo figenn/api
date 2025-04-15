@@ -2,7 +2,6 @@ package subscriptions
 
 import (
 	"context"
-	"errors"
 	"time"
 )
 
@@ -33,46 +32,6 @@ func (s *Service) CreateSubscription(ctx context.Context, userID string, req Cre
 		UpdatedAt:    time.Now(),
 	}
 	return s.r.CreateSubscription(ctx, sub)
-}
-
-func (r *Repository) GetActiveSubscriptions(ctx context.Context, userID string, year, month int) ([]*Subscription, error) {
-	query := `
-		SELECT id, user_id, name, category, color, description, start_date, end_date, price,
-			   logo_url, is_active, billing_cycle
-		FROM subscriptions
-		WHERE user_id = $1
-		AND is_active = TRUE
-		AND (
-			(EXTRACT(YEAR FROM start_date) = $2 AND EXTRACT(MONTH FROM start_date) = $3)
-			OR (end_date IS NOT NULL AND EXTRACT(YEAR FROM end_date) = $2 AND EXTRACT(MONTH FROM end_date) = $3)
-			OR (billing_cycle = 'monthly' AND start_date <= DATE($2 || '-' || $3 || '-01'))
-			OR (billing_cycle = 'quarterly' AND start_date <= DATE($2 || '-' || $3 || '-01') AND MOD(EXTRACT(MONTH FROM start_date) - $3 + 12 * (EXTRACT(YEAR FROM start_date) - $2), 3) = 0)
-			OR (billing_cycle = 'semi_annual' AND start_date <= DATE($2 || '-' || $3 || '-01') AND MOD(EXTRACT(MONTH FROM start_date) - $3 + 12 * (EXTRACT(YEAR FROM start_date) - $2), 6) = 0)
-			OR (billing_cycle = 'annual' AND start_date <= DATE($2 || '-' || $3 || '-01') AND EXTRACT(MONTH FROM start_date) = $3)
-			OR (billing_cycle = 'one_time' AND EXTRACT(YEAR FROM start_date) = $2 AND EXTRACT(MONTH FROM start_date) = $3)
-		)
-		ORDER BY start_date ASC`
-
-	rows, err := r.db.Pool().Query(ctx, query, userID, year, month)
-	if err != nil {
-		return nil, errors.New("failed to execute active subscriptions query")
-	}
-	defer rows.Close()
-
-	var subscriptions []*Subscription
-	for rows.Next() {
-		sub := new(Subscription)
-		err := rows.Scan(
-			&sub.Id, &sub.UserId, &sub.Name, &sub.Category, &sub.Color,
-			&sub.Description, &sub.StartDate, &sub.EndDate, &sub.Price,
-			&sub.LogoUrl, &sub.IsActive, &sub.BillingCycle,
-		)
-		if err != nil {
-			return nil, errors.New("failed to scan active subscription row")
-		}
-		subscriptions = append(subscriptions, sub)
-	}
-	return subscriptions, rows.Err()
 }
 
 func (s *Service) ListActiveSubscriptions(ctx context.Context, userID string, year, month int) ([]*Subscription, error) {

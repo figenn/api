@@ -91,10 +91,13 @@ func (a *API) ListActiveSubscriptions(c echo.Context) error {
 
 	subs, err := a.s.ListActiveSubscriptions(c.Request().Context(), userID, year, month)
 	if err != nil {
-		return errors.NewInternalServerError("Failed to fetch subscriptions")
+		return errors.NewInternalServerError("failed to fetch subscriptions")
 	}
 
-	return c.JSON(http.StatusOK, subs)
+	return c.JSON(http.StatusOK, echo.Map{
+		"subscriptions": subs,
+		"count ":        len(subs),
+	})
 }
 
 func (a *API) GetAllSubscriptions(c echo.Context) error {
