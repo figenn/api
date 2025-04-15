@@ -5,9 +5,12 @@ import (
 	"figenn/internal/server"
 	"log"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	godotenv.Load()
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		log.Fatal("La clé secrète JWT n'a pas été définie")

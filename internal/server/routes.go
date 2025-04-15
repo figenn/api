@@ -5,6 +5,7 @@ import (
 	"figenn/internal/mailer"
 	"figenn/internal/payment"
 	stripe "figenn/internal/payment"
+	"figenn/internal/portfolio"
 	"figenn/internal/powens"
 	"figenn/internal/subscriptions"
 	"figenn/internal/users"
@@ -27,7 +28,7 @@ func (s *Server) SetupRoutes() {
 	s.setupStripeRoutes(apiGroup)
 	s.SetupPowensApi().Bind(apiGroup)
 	s.setupSubscriptionRoutes(apiGroup)
-
+	s.setupPortfolioRoutes(apiGroup)
 }
 
 func (s *Server) setupAuthRoutes(apiGroup *echo.Group) {
@@ -48,6 +49,11 @@ func (s *Server) setupStripeRoutes(apiGroup *echo.Group) {
 func (s *Server) setupSubscriptionRoutes(apiGroup *echo.Group) {
 	subscriptionAPI := s.SetupSubscriptionAPI()
 	subscriptionAPI.Bind(apiGroup)
+}
+
+func (s *Server) setupPortfolioRoutes(apiGroup *echo.Group) {
+	portfolioAPI := s.newPortfolioAPI()
+	portfolioAPI.Bind(apiGroup)
 }
 
 func (s *Server) newAuthAPI() *auth.API {
@@ -74,6 +80,13 @@ func (s *Server) newStripeAPI() *stripe.API {
 	stripeRepo := stripe.NewRepository(s.db)
 	stripeService := stripe.NewService(os.Getenv("STRIPE_SECRET_KEY"), stripeRepo)
 	return stripe.NewAPI(s.config.JWTSecret, stripeService)
+}
+
+func (s *Server) newPortfolioAPI() *portfolio.API {
+	portfolioRepo := portfolio.NewRepository(s.db.Pool())
+	client := portfolio.NewClient(os.Getenv("ALPHA_VANTAGE_API_KEY"))
+	portfolioService := portfolio.NewService(portfolioRepo, client)
+	return portfolio.NewAPI(s.config.JWTSecret, portfolioService)
 }
 
 func (s *Server) SetupPowensApi() *powens.API {
