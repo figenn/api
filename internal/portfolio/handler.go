@@ -2,6 +2,7 @@ package portfolio
 
 import (
 	"figenn/internal/users"
+	"fmt"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -33,6 +34,8 @@ func (a *API) CreateStock(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return c.NoContent(http.StatusBadRequest)
 	}
+
+	fmt.Println("CreateStock request:", req)
 
 	stock, err := a.s.CreateStock(ctx, userId, req.Name, req.Currency, req.Shares, req.AvgPrice, req.Notes, req.PurchaseDate)
 	if err != nil {

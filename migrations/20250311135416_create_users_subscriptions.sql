@@ -74,6 +74,7 @@ CREATE TABLE stocks (
     dividend_yield DECIMAL(5,2) CHECK (dividend_yield >= 0),
     pe_ratio DECIMAL(8,2) CHECK (pe_ratio >= 0),
     market_cap BIGINT CHECK (market_cap >= 0), 
+    current_price DECIMAL(10,2) CHECK (current_price >= 0),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

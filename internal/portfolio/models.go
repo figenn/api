@@ -15,6 +15,7 @@ type Stock struct {
 	DividendYield float64
 	PERatio       float64
 	MarketCap     int64
+	CurrentPrice  float64
 	CreatedAt     time.Time
 }
 
@@ -30,16 +31,17 @@ type Match struct {
 }
 
 type Overview struct {
-	Symbol        string  `json:"Symbol"`
-	Name          string  `json:"Name"`
-	Sector        string  `json:"Sector"`
-	Industry      string  `json:"Industry"`
-	Exchange      string  `json:"Exchange"`
-	Currency      string  `json:"Currency"`
-	Country       string  `json:"Country"`
-	MarketCap     int64   `json:"MarketCapitalization,string"`
-	PERatio       float64 `json:"PERatio,string"`
-	DividendYield float64 `json:"DividendYield,string"`
+	Symbol        string
+	Name          string
+	Sector        string
+	Industry      string
+	Exchange      string
+	Currency      string
+	Country       string
+	MarketCap     int64
+	PERatio       float64
+	DividendYield float64
+	CurrentPrice  float64
 }
 
 type CreateStockRequest struct {
