@@ -90,8 +90,6 @@ func (s *Service) UpdateSubscription(ctx context.Context, userID, subID string, 
 		return ErrNoFieldsToUpdate
 	}
 
-	fields["updated_at"] = time.Now()
-
 	return s.r.UpdateSubscription(ctx, userID, subID, fields)
 }
 
